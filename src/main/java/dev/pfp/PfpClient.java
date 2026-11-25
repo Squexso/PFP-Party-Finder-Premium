@@ -115,6 +115,8 @@ public class PfpClient implements ClientModInitializer {
 
 	/** "Party Leader: [MVP+] Name ●" from "/p list". */
 	private static final Pattern LEADER = Pattern.compile("^Party Leader:\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})");
+	/** Newer list format: "● [MVP+] Name (Leader)". */
+	private static final Pattern LEADER_BULLET = Pattern.compile("^\\W*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*\\(Leader\\)");
 	private static final int CHECK_TIMEOUT = 40; // ticks to wait for the list
 	private static final List<PfpConfig.Entry> WAITING = new ArrayList<>();
 	private static int checkUntil = 0;
@@ -401,7 +403,12 @@ public class PfpClient implements ClientModInitializer {
 			if (WAITING.isEmpty() && tickNow >= swallowUntil) return true;
 			String text = clean(message.getString());
 			Matcher lm = LEADER.matcher(text);
-			if (lm.find() && !WAITING.isEmpty()) {
+			boolean isLeaderLine = lm.find();
+			if (!isLeaderLine) {
+				lm = LEADER_BULLET.matcher(text);
+				isLeaderLine = lm.find();
+			}
+			if (isLeaderLine && !WAITING.isEmpty()) {
 				swallowUntil = tickNow + 10;
 				resolveCheck(lm.group(1).equalsIgnoreCase(Minecraft.getInstance().getUser().getName()));
 				return false;
@@ -411,7 +418,8 @@ public class PfpClient implements ClientModInitializer {
 				return false;
 			}
 			return !(text.startsWith("-----") || text.isBlank() || text.startsWith("Party Members")
-				|| text.startsWith("Party Moderators") || text.startsWith("Party Leader"));
+				|| text.startsWith("Party Moderators") || text.startsWith("Party Leader") || text.startsWith("[Warp]")
+				|| (!Character.isLetterOrDigit(text.charAt(0)) && text.charAt(0) != '[')); // member lines start with a bullet
 		});
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> dispatcher.register(
