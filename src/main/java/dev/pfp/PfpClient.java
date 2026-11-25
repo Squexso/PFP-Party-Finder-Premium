@@ -27,7 +27,7 @@ public class PfpClient implements ClientModInitializer {
 	private static final Pattern PARTY_JOIN = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the party\\.");
 
 	/** "Party > [MVP+] Name: !pfp" */
-	private static final Pattern PARTY_AD = Pattern.compile("^\\s*Party\\s*>\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*:\\s*!pfp\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+	private static final Pattern PARTY_AD = Pattern.compile("^\\s*Party\\s*>\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*:\\s*!pfp(?:\\s+(\\w{1,16}(?:\\s+list)?))?\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	private static final int AD_COOLDOWN = 60; // Ticks (3 s)
 	private static int lastAd = -AD_COOLDOWN;
 
@@ -59,6 +59,47 @@ public class PfpClient implements ClientModInitializer {
 
 	static void announceAdded(String name, String reason) {
 		if (PfpConfig.announceAdd) partyMsg(PfpConfig.format(PfpConfig.addMsg, name, reason));
+	}
+
+	private static final int CHUNK = 220; // characters per party message
+	private static final int MAX_CHUNKS = 4;
+	private static final int CHUNK_GAP = 24; // ticks between messages of one answer
+	private static final List<String> OUT = new ArrayList<>();
+	private static int outAt;
+
+	/** Answer to "!pfp", "!pfp list", "!pfp full list" or "!pfp <name>" in party chat. */
+	private static void answer(String arg) {
+		PfpConfig.purge();
+		String a = arg == null ? "" : arg.trim().toLowerCase(Locale.ROOT);
+		if (a.isEmpty()) {
+			partyMsg(AD_TEXT);
+		} else if (a.equals("list")) {
+			int n = PfpConfig.entries.size();
+			partyMsg(n + (n == 1 ? " player is" : " players are") + " on my PFP list");
+		} else if (a.equals("full list")) {
+			if (PfpConfig.entries.isEmpty()) { partyMsg("My PFP list is empty"); return; }
+			StringBuilder cur = new StringBuilder("PFP list: ");
+			List<String> parts = new ArrayList<>();
+			for (PfpConfig.Entry e : PfpConfig.entries.values()) {
+				if (cur.length() + e.name().length() + 2 > CHUNK) { parts.add(cur.toString()); cur = new StringBuilder(); }
+				cur.append(cur.isEmpty() ? "" : ", ").append(e.name());
+			}
+			parts.add(cur.toString());
+			if (parts.size() > MAX_CHUNKS) {
+				parts = new ArrayList<>(parts.subList(0, MAX_CHUNKS));
+				parts.set(MAX_CHUNKS - 1, parts.get(MAX_CHUNKS - 1) + " ...");
+			}
+			partyMsg(parts.get(0));
+			OUT.clear();
+			OUT.addAll(parts.subList(1, parts.size()));
+			outAt = tickNow + CHUNK_GAP;
+		} else {
+			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(a));
+			if (e == null) { partyMsg(arg.trim() + " is not on my PFP list"); return; }
+			long d = PfpConfig.daysLeft(e);
+			partyMsg(e.name() + ": " + e.reason() + " (" + PfpConfig.modeLabel(e.mode() == null ? PfpConfig.BOTH : e.mode())
+				+ (d >= 0 ? ", " + d + (d == 1 ? " day left" : " days left") : ", permanent") + ")");
+		}
 	}
 
 	private static final int KICK_DELAY = 12; // Ticks (0,6 s)
@@ -93,6 +134,10 @@ public class PfpClient implements ClientModInitializer {
 		if (!WAITING.isEmpty() && tickNow >= checkUntil) {
 			resolveCheck(true);
 			isLeader = null; // a guess, don't remember it
+		}
+		if (!OUT.isEmpty() && tickNow >= outAt) {
+			partyMsg(OUT.remove(0));
+			outAt = tickNow + CHUNK_GAP;
 		}
 		if (awaitEcho != null && tickNow >= echoDeadline) {
 			if (echoRetries++ < 2) {
@@ -387,7 +432,7 @@ public class PfpClient implements ClientModInitializer {
 			Matcher ad = PARTY_AD.matcher(text);
 			if (PfpConfig.adEnabled && ad.find() && tickNow - lastAd >= AD_COOLDOWN) {
 				lastAd = tickNow;
-				partyMsg(AD_TEXT);
+				answer(ad.group(2));
 				return;
 			}
 			String mode = null; // unbekannt (Einladung)

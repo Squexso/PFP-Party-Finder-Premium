@@ -688,15 +688,26 @@ public class PfpScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float delta) {
 		super.extractRenderState(g, mx, my, delta);
 		if (!showBang || tab != 4 || bangBtn == null) return;
-		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26;
-		if (y + 70 > y0 + panelH) y = bangBtn.getY() - 76;
-		PfpTheme.round(g, x - 1, y - 1, w + 2, 72, PfpTheme.HAIR);
-		PfpTheme.round(g, x, y, w, 70, 0xFF1B1730);
+		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26, h = 118;
+		if (y + h > y0 + panelH) y = Math.max(y0 + 36, bangBtn.getY() - h - 6);
+		PfpTheme.round(g, x - 1, y - 1, w + 2, h + 2, PfpTheme.HAIR);
+		PfpTheme.round(g, x, y, w, h, 0xFF1B1730);
 		PfpTheme.draw(g, PfpTheme.medium("Party chat commands"), x + 10, y + 8, PfpTheme.TEXT);
-		PfpTheme.draw(g, PfpTheme.medium("!pfp"), x + 10, y + 24, PfpTheme.PURPLE);
-		PfpTheme.draw(g, PfpTheme.fit("Replies: " + PfpClient.AD_TEXT, w - 64), x + 54, y + 24, PfpTheme.TEXT_2);
-		PfpTheme.draw(g, PfpTheme.fit("Only in party chat, at most once every 3 seconds.", w - 20), x + 10, y + 40, PfpTheme.MUTED);
-		PfpTheme.draw(g, PfpTheme.fit("The text is fixed. Click anywhere to close.", w - 20), x + 10, y + 52, PfpTheme.MUTED);
+		String[][] cmds = {
+			{"!pfp", "look for PFP (26.2) by Squexso on Github"},
+			{"!pfp list", "how many players are on my list"},
+			{"!pfp full list", "the names of all players on my list"},
+			{"!pfp <name>", "why the player is on my list, or not found"},
+		};
+		int cy = y + 26;
+		int cw = 0;
+		for (String[] c : cmds) cw = Math.max(cw, PfpTheme.width(PfpTheme.medium(c[0])));
+		for (String[] c : cmds) {
+			PfpTheme.draw(g, PfpTheme.medium(c[0]), x + 10, cy, PfpTheme.PURPLE);
+			PfpTheme.draw(g, PfpTheme.fit(c[1], w - 30 - cw), x + 20 + cw, cy, PfpTheme.TEXT_2);
+			cy += 15;
+		}
+		PfpTheme.draw(g, PfpTheme.fit("Answers in party chat, once every 3 seconds. Click to close.", w - 20), x + 10, cy + 4, PfpTheme.MUTED);
 	}
 
 	private void drawField(GuiGraphicsExtractor g, EditBox box) {
