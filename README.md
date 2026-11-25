@@ -1,4 +1,4 @@
-# PFP
+# PFP Party Finder Premium (Hypixel SkyBlock Fabric mod, Minecraft 26.2)
 
 Client-side Fabric mod for Minecraft **26.2** (Hypixel SkyBlock). Players on your blacklist are kicked from your party automatically when they join, via Party Finder (Dungeons / Kuudra) or optionally by invite.
 
