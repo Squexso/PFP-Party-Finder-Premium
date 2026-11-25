@@ -265,6 +265,26 @@ final class PartyLog {
 		return n;
 	}
 
+	/** Text for "!pfp kicks". */
+	static String kicksText() {
+		int n = history.stream().mapToInt(x -> x.kicked.size()).sum();
+		if (cur != null && !history.contains(cur)) n += cur.kicked.size();
+		int p = recorded();
+		return p == 0 ? "No parties recorded yet" : "I kicked " + n + (n == 1 ? " player" : " players") + " in my last " + p + (p == 1 ? " party" : " parties");
+	}
+
+	/** Text for "!pfp last": the most recent recorded party. */
+	static String lastText() {
+		Session x = cur != null ? cur : history.isEmpty() ? null : history.get(0);
+		if (x == null) return "No parties recorded yet";
+		StringBuilder sb = new StringBuilder("Last party: ").append(title(x)).append(", ").append(x.members.size() + 1).append(" players");
+		long end = x.left > 0 ? x.left : System.currentTimeMillis();
+		if (x.joined > 0) sb.append(", ").append(Math.max(1, (end - x.joined) / 60000)).append(" min");
+		sb.append(", ").append(x.result == null ? "result unknown" : x.result);
+		if (!x.kicked.isEmpty()) sb.append(", ").append(x.kicked.size()).append(" kicked");
+		return sb.toString();
+	}
+
 	/** Text for "!pfp supplies": supplies per player of the last Kuudra run. */
 	static String suppliesText() {
 		Session x = lastRun(PfpConfig.KUUDRA);

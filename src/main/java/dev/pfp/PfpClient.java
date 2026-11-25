@@ -74,7 +74,20 @@ public class PfpClient implements ClientModInitializer {
 		if (a.isEmpty()) {
 			partyMsg(AD_TEXT);
 		} else if (a.equals("help")) {
-			partyMsg("Commands: !pfp, !pfp list, !pfp full list, !pfp <name>, !pfp seen <name>, !pfp supplies, !pfp secrets");
+			partyMsg("Commands: !pfp list | full list | <name> | seen <name> | tag <name> | req | kicks | last | supplies | secrets");
+		} else if (a.equals("req")) {
+			if (PfpConfig.reqs.isEmpty()) { partyMsg("No item requirements set"); return; }
+			StringBuilder sb = new StringBuilder("Requirements: ");
+			for (PfpConfig.Req r : PfpConfig.reqs) sb.append(sb.length() > 14 ? ", " : "").append(r.name);
+			partyMsg(sb.toString());
+		} else if (a.equals("kicks")) {
+			partyMsg(PartyLog.kicksText());
+		} else if (a.equals("last")) {
+			partyMsg(PartyLog.lastText());
+		} else if (a.startsWith("tag ")) {
+			String who = arg.trim().substring(4).trim();
+			String tag = PfpConfig.tagOf(who);
+			partyMsg(tag == null ? who + " has no tag" : who + ": " + tag);
 		} else if (a.equals("supplies")) {
 			partyMsg(PartyLog.suppliesText());
 		} else if (a.equals("secrets")) {

@@ -13,7 +13,8 @@ import net.minecraft.client.Minecraft;
  * If the data cannot be read (inventory API off, lookup failed) the result is unknown and nobody is kicked.
  */
 final class GearCheck {
-	static final Map<String, String> ALIAS = Map.of("term", "TERMINATOR", "hype", "HYPERION", "juju", "JUJU_SHORTBOW", "bonemerang", "BONE_BOOMERANG");
+	static final Map<String, String> ALIAS = Map.of("term", "TERMINATOR", "hype", "HYPERION|SCYLLA|ASTRAEA|VALKYRIE", "wb", "HYPERION|SCYLLA|ASTRAEA|VALKYRIE", "wither blade", "HYPERION|SCYLLA|ASTRAEA|VALKYRIE",
+		"juju", "JUJU_SHORTBOW", "bonemerang", "BONE_BOOMERANG");
 
 	private GearCheck() { }
 
@@ -45,7 +46,8 @@ final class GearCheck {
 	static String missing(java.util.List<PfpConfig.Req> req, Set<String> ids) {
 		StringBuilder out = new StringBuilder();
 		for (PfpConfig.Req r : req) {
-			if (ids.stream().noneMatch(id -> id.contains(r.id))) out.append(out.isEmpty() ? "" : ", ").append(r.name);
+			boolean has = java.util.Arrays.stream(r.id.split("\\|")).anyMatch(alt -> ids.stream().anyMatch(id -> id.contains(alt)));
+			if (!has) out.append(out.isEmpty() ? "" : ", ").append(r.name);
 		}
 		return out.toString();
 	}

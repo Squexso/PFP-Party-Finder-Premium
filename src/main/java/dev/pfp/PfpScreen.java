@@ -68,7 +68,7 @@ public class PfpScreen extends Screen {
 
 	private static final String[][] PRESETS = {
 		{"Terminator", "TERMINATOR", "minecraft:bow"}, {"Juju Shortbow", "JUJU_SHORTBOW", "minecraft:bow"},
-		{"Last Breath", "LAST_BREATH", "minecraft:bow"}, {"Hyperion", "HYPERION", "minecraft:iron_sword"},
+		{"Last Breath", "LAST_BREATH", "minecraft:bow"}, {"Wither Blade", "HYPERION|SCYLLA|ASTRAEA|VALKYRIE", "minecraft:iron_sword"},
 		{"Livid Dagger", "LIVID_DAGGER", "minecraft:iron_sword"}, {"Giants Sword", "GIANTS_SWORD", "minecraft:iron_sword"},
 		{"Claymore", "CLAYMORE", "minecraft:iron_sword"}, {"Bonemerang", "BONE_BOOMERANG", "minecraft:bone"},
 		{"Spirit Mask", "SPIRIT_MASK", "minecraft:player_head"}, {"Bonzo Mask", "BONZO_MASK", "minecraft:player_head"},
@@ -688,7 +688,7 @@ public class PfpScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float delta) {
 		super.extractRenderState(g, mx, my, delta);
 		if (!showBang || tab != 4 || bangBtn == null) return;
-		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26, h = 26 + 8 * 15 + 22;
+		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26, h = 26 + 12 * 15 + 22;
 		if (y + h > y0 + panelH) y = Math.max(y0 + 36, bangBtn.getY() - h - 6);
 		PfpTheme.round(g, x - 1, y - 1, w + 2, h + 2, PfpTheme.HAIR);
 		PfpTheme.round(g, x, y, w, h, 0xFF1B1730);
@@ -701,6 +701,10 @@ public class PfpScreen extends Screen {
 			{"!pfp seen <name>", "in how many of my last parties"},
 			{"!pfp supplies", "Kuudra supplies per player, last run"},
 			{"!pfp secrets", "dungeon secrets per player, last run"},
+			{"!pfp tag <name>", "my tag for the player"},
+			{"!pfp req", "the items I require from joiners"},
+			{"!pfp kicks", "how many I kicked in my last parties"},
+			{"!pfp last", "short summary of my last party"},
 			{"!pfp help", "lists these commands"},
 		};
 		int cy = y + 26;
