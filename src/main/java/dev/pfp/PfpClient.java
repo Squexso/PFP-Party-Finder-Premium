@@ -386,6 +386,7 @@ public class PfpClient implements ClientModInitializer {
 						return say(c, PfpConfig.apiKey.isEmpty() ? "API key removed" : "API key saved (it is never shown again)", ChatFormatting.GREEN);
 					})))
 				.then(ClientCommands.literal("debug")
+					.executes(c -> { PfpConfig.debug = !PfpConfig.debug; PfpConfig.save(); return say(c, PfpConfig.debug ? "Debug log on: config/pfp_debug.log" : "Debug log off", ChatFormatting.GREEN); })
 					.then(ClientCommands.literal("on").executes(c -> { PfpConfig.debug = true; PfpConfig.save(); return say(c, "Debug log on: config/pfp_debug.log", ChatFormatting.GREEN); }))
 					.then(ClientCommands.literal("off").executes(c -> { PfpConfig.debug = false; PfpConfig.save(); return say(c, "Debug log off", ChatFormatting.GREEN); })))
 				.then(ClientCommands.literal("tag")
