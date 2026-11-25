@@ -169,6 +169,23 @@ final class PartyLog {
 		repeat(List.of(name));
 	}
 
+	/** The party list was read (from "/p list"): make our picture of the party match it. */
+	static void sync(String leader, List<String> names) {
+		if (cur == null) start(leader != null ? leader : me());
+		if (leader != null) cur.leader = leader;
+		List<String> added = new ArrayList<>();
+		for (String n : names) {
+			if (n.equalsIgnoreCase(me())) continue;
+			if (present.stream().noneMatch(n::equalsIgnoreCase)) added.add(n);
+		}
+		present.removeIf(p -> names.stream().noneMatch(p::equalsIgnoreCase));
+		names.forEach(PartyLog::add);
+		if (!added.isEmpty()) {
+			check(added, leader != null && added.stream().anyMatch(leader::equalsIgnoreCase));
+			repeat(added);
+		}
+	}
+
 	/** We created a Party Finder listing (we lead). */
 	static void ownParty(String type) {
 		start(me());

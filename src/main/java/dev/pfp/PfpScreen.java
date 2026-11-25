@@ -126,6 +126,7 @@ public class PfpScreen extends Screen {
 		listTop = y0 + HEAD_H;
 		int left = x0 + PAD;
 		textBoxes.clear();
+		if (tab == 0) PfpClient.syncParty();
 		bangBtn = null;
 		if (tab != 4) showBang = false;
 

@@ -196,6 +196,45 @@ public class PfpClient implements ClientModInitializer {
 	private static int checkUntil = 0;
 	private static int swallowUntil = 0;
 
+	/** Reads the party list ("Party Members (2)", then "● [VIP] Name [Kick]" lines) wherever it comes from, also when typed by the player. */
+	private static final Pattern MEMBER_LINE = Pattern.compile("^[^\\w\\[]+(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})(\\s*\\((Leader|Moderator)\\))?");
+	private static final Pattern MEMBERS_HEAD = Pattern.compile("^Party Members \\(\\d+\\)");
+	private static boolean collecting, syncing;
+	private static final List<String> COLLECTED = new ArrayList<>();
+	private static String collectedLeader;
+	private static int collectUntil, lastSync = -1000;
+
+	private static void parseList(String text) {
+		if (MEMBERS_HEAD.matcher(text).find()) {
+			collecting = true;
+			COLLECTED.clear();
+			collectedLeader = null;
+			collectUntil = tickNow + 40;
+			return;
+		}
+		if (!collecting) return;
+		if (tickNow > collectUntil) { collecting = false; return; }
+		Matcher m = MEMBER_LINE.matcher(text);
+		if (m.find()) {
+			COLLECTED.add(m.group(1));
+			if ("Leader".equals(m.group(3))) collectedLeader = m.group(1);
+		} else if (text.startsWith("-----") && !COLLECTED.isEmpty()) {
+			collecting = false;
+			PartyLog.sync(collectedLeader, new ArrayList<>(COLLECTED));
+			if (collectedLeader != null) isLeader = collectedLeader.equalsIgnoreCase(Minecraft.getInstance().getUser().getName());
+		}
+	}
+
+	/** Quietly ask for the party list (answer hidden) when the GUI is opened, at most every 10 seconds. */
+	static void syncParty() {
+		var p = Minecraft.getInstance().player;
+		if (p == null || tickNow - lastSync < 200) return;
+		lastSync = tickNow;
+		syncing = true;
+		swallowUntil = tickNow + 30;
+		p.connection.sendCommand("p list");
+	}
+
 	/** Whether we lead the current party: null = unknown. Tracked from Hypixel's chat messages. */
 	private static Boolean isLeader = null;
 	private static final Pattern P_JOINED = Pattern.compile("^You have joined (?:\\[[^\\]]+\\] )?(\\w{1,16})'?s? party!");
@@ -537,7 +576,9 @@ public class PfpClient implements ClientModInitializer {
 		guardedAllow((message, overlay) -> {
 			if (overlay) return true;
 			if (SecretTracker.capture(clean(message.getString()))) return false;
-			if (WAITING.isEmpty() && tickNow >= swallowUntil) return true;
+			parseList(clean(message.getString()));
+			if (syncing && tickNow >= swallowUntil) syncing = false;
+			if (WAITING.isEmpty() && !syncing && tickNow >= swallowUntil) return true;
 			String text = clean(message.getString());
 			Matcher lm = LEADER.matcher(text);
 			boolean isLeaderLine = lm.find();
@@ -551,6 +592,8 @@ public class PfpClient implements ClientModInitializer {
 				return false;
 			}
 			if (text.contains("You are not currently in a party")) {
+				if (syncing) PartyLog.end();
+				syncing = false;
 				WAITING.clear();
 				return false;
 			}
