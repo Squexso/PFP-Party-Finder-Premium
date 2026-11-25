@@ -2,10 +2,16 @@
 	"schemaVersion": 1,
 	"id": "pfp",
 	"version": "${version}",
-	"name": "PFP",
-	"description": "Kickt blacklistete Spieler automatisch aus der Party (Party Finder, Dungeons, Kuudra).",
-	"authors": ["you"],
+	"name": "PFP Party Finder Premium",
+	"description": "Blacklist, auto-kick and party tools for Hypixel SkyBlock dungeons and Kuudra: party history, player tags, repeat alerts, gear requirements and !pfp party commands.",
+	"authors": ["Squexso"],
+	"contact": {
+		"homepage": "https://github.com/Squexso/PFP-Party-Finder-Premium",
+		"sources": "https://github.com/Squexso/PFP-Party-Finder-Premium",
+		"issues": "https://github.com/Squexso/PFP-Party-Finder-Premium/issues"
+	},
 	"license": "MIT",
+	"icon": "assets/pfp/icon.png",
 	"environment": "client",
 	"entrypoints": { "client": ["dev.pfp.PfpClient"] },
 	"depends": {
