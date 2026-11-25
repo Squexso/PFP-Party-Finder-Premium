@@ -31,8 +31,8 @@ final class SecretTracker {
 	private static final Map<String, Integer> BASELINE = new ConcurrentHashMap<>();
 	private static final long AFTER_RUN_DELAY_S = 20; // the API lags behind the game
 	private static boolean warnedKey;
-	/** Deployed proxy/worker.js (it holds the API key). Empty = not deployed, players then use their own key. */
-	private static final String PROXY_URL = "";
+	/** Deployed proxy/worker.js (it holds the API key). If it fails, the player's own key is used. */
+	private static final String PROXY_URL = "https://pfp-secrets.danielseinfont1.workers.dev";
 
 	private static final Map<String, Integer> CAPTURED = new ConcurrentHashMap<>();
 	private static final java.util.regex.Pattern COUNT = java.util.regex.Pattern.compile("^(\\w{1,16}): (\\d+)$");
@@ -142,7 +142,8 @@ final class SecretTracker {
 				HttpResponse<String> p = HTTP.send(HttpRequest.newBuilder(URI.create(PROXY_URL + "/secrets/" + uuid))
 					.timeout(Duration.ofSeconds(10)).header("User-Agent", "PFP-Party-Finder-Premium").build(), HttpResponse.BodyHandlers.ofString());
 				if (p.statusCode() == 429) chat("Secret lookup rate limit reached.", ChatFormatting.RED);
-				return p.statusCode() == 200 ? JsonParser.parseString(p.body()).getAsJsonObject().get("secrets").getAsInt() : null;
+				if (p.statusCode() == 200) return JsonParser.parseString(p.body()).getAsJsonObject().get("secrets").getAsInt();
+				if (PfpConfig.apiKey.isBlank()) return null; // proxy has no key yet or failed: fall back to the player's own key
 			}
 			HttpResponse<String> r = HTTP.send(HttpRequest.newBuilder(URI.create("https://api.hypixel.net/v2/player?uuid=" + uuid))
 				.timeout(Duration.ofSeconds(10)).header("API-Key", PfpConfig.apiKey).header("User-Agent", "PFP-Party-Finder-Premium").build(),
