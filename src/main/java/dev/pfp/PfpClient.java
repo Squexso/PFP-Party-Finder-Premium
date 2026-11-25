@@ -457,7 +457,13 @@ public class PfpClient implements ClientModInitializer {
 
 		// Identical consecutive chat lines become one line with "(x2)", "(x3)", ...
 		guardedAllow((message, overlay) -> {
-			if (overlay || !PfpConfig.stackChat) return true;
+			if (overlay) return true;
+			// our own party message coming back (must be seen here: a stacked duplicate never reaches the GAME event)
+			if (awaitEcho != null) {
+				String t = clean(message.getString());
+				if (t.startsWith("Party >") && t.endsWith(awaitEcho)) awaitEcho = null;
+			}
+			if (!PfpConfig.stackChat) return true;
 			return !stack(message);
 		});
 
