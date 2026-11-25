@@ -28,6 +28,9 @@ import net.minecraft.network.chat.Component;
 final class SecretTracker {
 	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 	private static final Map<String, String> UUIDS = new ConcurrentHashMap<>();
+	/** API answers are kept for a minute: the API is only the last resort and is hit as rarely as possible. */
+	private static final Map<String, long[]> SECRET_CACHE = new ConcurrentHashMap<>();
+	private static final Map<String, Object[]> GEAR_CACHE = new ConcurrentHashMap<>();
 	private static final Map<String, Integer> BASELINE = new ConcurrentHashMap<>();
 	private static final long AFTER_RUN_DELAY_S = 20; // the API lags behind the game
 	private static boolean warnedKey;
@@ -131,6 +134,17 @@ final class SecretTracker {
 
 	/** Item ids of a player (inventory, armor, equipment, ender chest) via the proxy, or null when unknown (API off, error). */
 	static java.util.Set<String> gear(String name) {
+		Object[] hit = GEAR_CACHE.get(name.toLowerCase());
+		if (hit != null && System.currentTimeMillis() - (long) hit[1] < 120_000) {
+			@SuppressWarnings("unchecked") java.util.Set<String> c = (java.util.Set<String>) hit[0];
+			return c;
+		}
+		java.util.Set<String> ids = fetchGear(name);
+		if (ids != null) GEAR_CACHE.put(name.toLowerCase(), new Object[] { ids, System.currentTimeMillis() });
+		return ids;
+	}
+
+	private static java.util.Set<String> fetchGear(String name) {
 		try {
 			String uuid = uuid(name);
 			if (uuid == null) return null;
@@ -153,6 +167,14 @@ final class SecretTracker {
 
 	/** Total secrets (achievement skyblock_treasure_hunter) or null when it could not be read. */
 	private static Integer secrets(String name) {
+		long[] hit = SECRET_CACHE.get(name.toLowerCase());
+		if (hit != null && System.currentTimeMillis() - hit[1] < 60_000) return (int) hit[0];
+		Integer v = fetchSecrets(name);
+		if (v != null) SECRET_CACHE.put(name.toLowerCase(), new long[] { v, System.currentTimeMillis() });
+		return v;
+	}
+
+	private static Integer fetchSecrets(String name) {
 		try {
 			String uuid = uuid(name);
 			if (uuid == null) return null;
