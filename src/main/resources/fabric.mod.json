@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"id": "pfp",
+	"version": "${version}",
+	"name": "PFP",
+	"description": "Kickt blacklistete Spieler automatisch aus der Party (Party Finder, Dungeons, Kuudra).",
+	"authors": ["you"],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": { "client": ["dev.pfp.PfpClient"] },
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

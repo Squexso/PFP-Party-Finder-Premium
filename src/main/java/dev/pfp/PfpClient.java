@@ -1,0 +1,448 @@
+package dev.pfp;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+
+public class PfpClient implements ClientModInitializer {
+	/** "Party Finder > Name joined the dungeon group! (...)" / "... joined the group! (...)" (Kuudra). */
+	private static final Pattern PF_JOIN = Pattern.compile("^Party Finder > (?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the .*?group!");
+	/** "[MVP+] Name joined the party." (Einladungen) */
+	private static final Pattern PARTY_JOIN = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the party\\.");
+
+	/** "Party > [MVP+] Name: !pfp" */
+	private static final Pattern PARTY_AD = Pattern.compile("^\\s*Party\\s*>\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*:\\s*!pfp\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+	private static final int AD_COOLDOWN = 60; // Ticks (3 s)
+	private static int lastAd = -AD_COOLDOWN;
+
+	/** Fixed reply to "!pfp" (not editable). */
+	private static final String AD_TEXT = "look for PFP (26.2) by Squexso on Github";
+
+	private static boolean openGui = false;
+	private static net.minecraft.client.KeyMapping coordsKey;
+
+	/** Sendet "/pc [PFP] text"; "[PFP]" steht immer vorne, Zeilenumbrueche fliegen raus, Laenge begrenzt. */
+	static void partyMsg(String text) {
+		var player = Minecraft.getInstance().player;
+		if (player == null) return;
+		String t = text.replaceAll("[\\r\\n]+", " ").trim();
+		if (t.regionMatches(true, 0, "[PFP]", 0, 5)) t = t.substring(5).trim();
+		String msg = "[PFP] " + t;
+		if (msg.length() > 250) msg = msg.substring(0, 250);
+		player.connection.sendCommand("pc " + msg);
+	}
+
+	static void announceAdded(String name, String reason) {
+		if (PfpConfig.announceAdd) partyMsg(PfpConfig.format(PfpConfig.addMsg, name, reason));
+	}
+
+	private static final int KICK_DELAY = 12; // Ticks (0,6 s)
+	private static final int RETRY_GAP = 30; // Ticks (1,5 s)
+	private static final int MAX_TRIES = 3;
+	private static int tickNow = 0;
+
+	private static final class PendingKick {
+		final String name;
+		int sendAt;
+		int triesLeft;
+		PendingKick(String name, int sendAt, int triesLeft) {
+			this.name = name;
+			this.sendAt = sendAt;
+			this.triesLeft = triesLeft;
+		}
+	}
+
+	private static final List<PendingKick> PENDING = new ArrayList<>();
+
+	private static void tickKicks(Minecraft client) {
+		tickNow++;
+		var player = client.player;
+		if (player == null) {
+			PENDING.clear();
+			WAITING.clear();
+			isLeader = null;
+			PartyLog.end();
+			return;
+		}
+		// No answer to "/p list" in time: try anyway (a failed kick shows the popup).
+		if (!WAITING.isEmpty() && tickNow >= checkUntil) {
+			resolveCheck(true);
+			isLeader = null; // a guess, don't remember it
+		}
+		PENDING.removeIf(k -> {
+			if (tickNow < k.sendAt) return false;
+			player.connection.sendCommand("p kick " + k.name);
+			k.triesLeft--;
+			k.sendAt = tickNow + RETRY_GAP;
+			return k.triesLeft <= 0;
+		});
+	}
+
+	/** "Party Leader: [MVP+] Name ●" from "/p list". */
+	private static final Pattern LEADER = Pattern.compile("^Party Leader:\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})");
+	private static final int CHECK_TIMEOUT = 40; // ticks to wait for the list
+	private static final List<PfpConfig.Entry> WAITING = new ArrayList<>();
+	private static int checkUntil = 0;
+	private static int swallowUntil = 0;
+
+	/** Whether we lead the current party: null = unknown. Tracked from Hypixel's chat messages. */
+	private static Boolean isLeader = null;
+	private static final Pattern P_JOINED = Pattern.compile("^You have joined (?:\\[[^\\]]+\\] )?(\\w{1,16})'?s? party!");
+	private static final Pattern P_WITH = Pattern.compile("^You'll be partying with: (.*)$");
+	private static final Pattern P_LEFT = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) (?:has left the party|has been removed from the party|was removed from your party because they disconnected)");
+	private static final Pattern RANKED = Pattern.compile("^(?:\\[[^\\]]+\\]\\s*)?(\\w{1,16})");
+	private static final Pattern P_INVITED = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) invited .*? to (?:your|the) party!");
+	private static final Pattern P_TRANSFER = Pattern.compile("^The party was transferred to (?:\\[[^\\]]+\\] )?(\\w{1,16}) (?:by|because) ");
+	private static final Pattern P_GONE = Pattern.compile("^(?:You left the party|You have been kicked from the party|You are not currently in a party|The party was disbanded|.* has disbanded the party)");
+
+	private static final Pattern QUEUED = Pattern.compile("^Party Finder > Your party has been queued in the dungeon finder!$");
+	private static final Pattern DUNGEON_START = Pattern.compile("^\\[NPC] Mort: Good luck\\.$");
+	private static final Pattern DUNGEON_END = Pattern.compile("^\\s*Team Score: \\d+ \\(.{1,2}\\)");
+	private static final Pattern KUUDRA_START = Pattern.compile("^\\[NPC] Elle: Okay adventurers, I will go and fish up Kuudra!$");
+	private static final Pattern KUUDRA_END = Pattern.compile("^\\[NPC] Elle: Good job everyone\\. A hard fought battle come to an end\\.");
+	private static final Pattern SUPPLY = Pattern.compile("^(?:\\[[^\\]]*\\]\\s?)?(\\w{1,16}) recovered one of Elle's supplies! \\(\\d+/\\d+\\)");
+
+	private static void trackParty(String text) {
+		String me = Minecraft.getInstance().getUser().getName();
+		Matcher m;
+		if (PfpConfig.debug) PartyLog.debug(text);
+		if (QUEUED.matcher(text).find()) {
+			isLeader = true;
+			PartyLog.ownParty(PfpConfig.DUNGEON);
+		} else if (DUNGEON_START.matcher(text).find()) {
+			PartyLog.runStart(PfpConfig.DUNGEON);
+		} else if (KUUDRA_START.matcher(text).find()) {
+			PartyLog.runStart(PfpConfig.KUUDRA);
+		} else if (DUNGEON_END.matcher(text).find() || KUUDRA_END.matcher(text).find()) {
+			PartyLog.runEnd();
+		} else if ((m = SUPPLY.matcher(text)).find()) {
+			PartyLog.supply(m.group(1));
+		} else if ((m = P_JOINED.matcher(text)).find()) {
+			isLeader = false;
+			PartyLog.joined(m.group(1));
+		} else if ((m = P_WITH.matcher(text)).find()) {
+			List<String> names = new ArrayList<>();
+			for (String part : m.group(1).split(",")) {
+				Matcher n = RANKED.matcher(part.trim());
+				if (n.find()) names.add(n.group(1));
+			}
+			PartyLog.members(names);
+		} else if ((m = P_LEFT.matcher(text)).find()) {
+			PartyLog.left(m.group(1));
+		} else if ((m = P_INVITED.matcher(text)).find()) {
+			if (m.group(1).equalsIgnoreCase(me) || m.group(1).equalsIgnoreCase("You")) isLeader = true;
+		} else if ((m = P_TRANSFER.matcher(text)).find()) {
+			isLeader = m.group(1).equalsIgnoreCase(me);
+		} else if (P_GONE.matcher(text).find()) {
+			isLeader = null;
+			PartyLog.end();
+		}
+	}
+
+	static void sendCoords() {
+		var p = Minecraft.getInstance().player;
+		if (p == null) return;
+		p.connection.sendCommand("pc x: " + p.getBlockX() + " y: " + p.getBlockY() + " z: " + p.getBlockZ());
+	}
+
+	static void rebindCoords(int code) {
+		coordsKey.setKey(code < 0 ? com.mojang.blaze3d.platform.InputConstants.UNKNOWN
+			: com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(code));
+		net.minecraft.client.KeyMapping.resetMapping();
+		Minecraft.getInstance().options.save();
+	}
+
+	static String coordsKeyName() {
+		return coordsKey == null ? "?" : coordsKey.getTranslatedKeyMessage().getString();
+	}
+
+	private static final int STACK_LOOKBACK = 12; // how many recent chat lines are searched for a repeat
+	private static final Pattern COUNT_SUFFIX = Pattern.compile(" \\(x(\\d+)\\)$");
+
+	/** @return true when the message repeats a recent chat line; that line is replaced by one with a higher counter. */
+	@SuppressWarnings("unchecked")
+	private static boolean stack(Component message) {
+		String text = clean(message.getString());
+		if (text.isBlank() || text.startsWith("-----")) return false;
+		var chat = Minecraft.getInstance().gui.hud.getChat();
+		try {
+			var f = chat.getClass().getDeclaredField("allMessages");
+			f.setAccessible(true);
+			var all = (List<net.minecraft.client.multiplayer.chat.GuiMessage>) f.get(chat);
+			int n = Math.min(all.size(), STACK_LOOKBACK);
+			for (int i = 0; i < n; i++) {
+				String line = clean(all.get(i).content().getString());
+				int count = 1;
+				Matcher m = COUNT_SUFFIX.matcher(line);
+				if (m.find()) {
+					count = Integer.parseInt(m.group(1));
+					line = line.substring(0, m.start());
+				}
+				if (!line.equals(text)) continue;
+				all.remove(i);
+				chat.rescaleChat();
+				chat.addServerSystemMessage(message.copy()
+					.append(Component.literal(" (x" + (count + 1) + ")").withStyle(ChatFormatting.GRAY)));
+				return true;
+			}
+		} catch (ReflectiveOperationException | RuntimeException ex) {
+			return false;
+		}
+		return false;
+	}
+
+	private static String clean(String s) {
+		return s.replace(' ', ' ').replaceAll("§.", "");
+	}
+
+	/** Blacklisted player joined: ask Hypixel who leads the party before doing anything. */
+	private static void queueCheck(PfpConfig.Entry e) {
+		var player = Minecraft.getInstance().player;
+		if (player == null) return;
+		if (isLeader != null) { // known from chat: no need to ask
+			WAITING.add(e);
+			resolveCheck(isLeader);
+			return;
+		}
+		if (WAITING.isEmpty()) {
+			player.connection.sendCommand("p list");
+			checkUntil = tickNow + CHECK_TIMEOUT;
+		}
+		WAITING.add(e);
+	}
+
+	private static void resolveCheck(boolean leader) {
+		isLeader = leader;
+		List<PfpConfig.Entry> list = new ArrayList<>(WAITING);
+		WAITING.clear();
+		for (PfpConfig.Entry e : list) {
+			if (leader) {
+				// Message first, then kick a moment later (Hypixel drops a second command in the same tick).
+				partyMsg(PfpConfig.format(PfpConfig.kickMsg, e.name(), e.reason()));
+				PartyLog.kicked(e.name());
+				PENDING.add(new PendingKick(e.name(), tickNow + KICK_DELAY, MAX_TRIES));
+			} else {
+				notLeader(e.name(), e.reason());
+			}
+		}
+	}
+
+	private static void notLeader(String name, String reason) {
+		var mc = Minecraft.getInstance();
+		net.minecraft.client.gui.components.toasts.SystemToast.add(mc.gui.toastManager(),
+			net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+			Component.literal("PFP: " + name + " is blacklisted"),
+			Component.literal("You are not party leader (" + reason + ")"));
+	}
+
+	/** Hypixel meldet den Kick -> nicht weiter wiederholen. */
+	private static void cancelIfKicked(String text) {
+		String t = text.toLowerCase(Locale.ROOT);
+		if (t.contains("not this party's leader") || t.contains("not the party leader") || t.contains("you are not in a party")) {
+			for (PendingKick k : PENDING) {
+				PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(k.name));
+				notLeader(k.name, e == null ? "" : e.reason());
+			}
+			PENDING.clear();
+			return;
+		}
+		PENDING.removeIf(k -> {
+			String n = k.name.toLowerCase(Locale.ROOT);
+			return t.contains(n + " has been removed from the party")
+				|| t.contains(n + " has left the party")
+				|| t.contains(n + " is not in your party")
+				|| t.contains(n + " is not in the party");
+		});
+	}
+
+	@Override
+	public void onInitializeClient() {
+		PfpConfig.load();
+		PartyLog.load();
+		net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, ctx, flag, lines) -> {
+			if (PfpConfig.enabled && PfpConfig.tooltipWarn) PartyLog.tooltip(lines);
+		});
+
+		coordsKey = net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper.registerKeyMapping(
+			new net.minecraft.client.KeyMapping("key.pfp.coords", -1 /* unbound by default */,
+				net.minecraft.client.KeyMapping.Category.register(net.minecraft.resources.Identifier.fromNamespaceAndPath("pfp", "main"))));
+
+		// Der Chat schliesst sich nach dem Befehl, daher GUI erst im naechsten Tick oeffnen.
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			if (openGui) {
+				openGui = false;
+				client.setScreenAndShow(new PfpScreen());
+			}
+			tickKicks(client);
+			while (coordsKey.consumeClick()) {
+				sendCoords();
+			}
+		});
+
+		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+			if (!overlay) trackParty(clean(message.getString()));
+		});
+
+		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+			if (overlay || !PfpConfig.enabled) return;
+			String text = clean(message.getString());
+			cancelIfKicked(text);
+			Matcher ad = PARTY_AD.matcher(text);
+			if (PfpConfig.adEnabled && ad.find() && tickNow - lastAd >= AD_COOLDOWN) {
+				lastAd = tickNow;
+				partyMsg(AD_TEXT);
+				return;
+			}
+			String mode = null; // unbekannt (Einladung)
+			Matcher m = PF_JOIN.matcher(text);
+			if (m.find()) {
+				mode = text.contains("dungeon group") ? PfpConfig.DUNGEON : PfpConfig.KUUDRA;
+			} else {
+				if (PfpConfig.pfOnly) return;
+				m = PARTY_JOIN.matcher(text);
+				if (!m.find()) return;
+			}
+			PartyLog.memberJoin(m.group(1), mode);
+			PfpConfig.purge();
+			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(m.group(1)));
+			var player = Minecraft.getInstance().player;
+			if (player == null) return;
+			if (e == null || !PfpConfig.applies(e, mode)) return;
+			queueCheck(e);
+		});
+
+		// Identical consecutive chat lines become one line with "(x2)", "(x3)", ...
+		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
+			if (overlay || !PfpConfig.stackChat) return true;
+			return !stack(message);
+		});
+
+		// While waiting for the "/p list" answer, hide that list from the chat.
+		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
+			if (overlay) return true;
+			if (SecretTracker.capture(clean(message.getString()))) return false;
+			if (WAITING.isEmpty() && tickNow >= swallowUntil) return true;
+			String text = clean(message.getString());
+			Matcher lm = LEADER.matcher(text);
+			if (lm.find() && !WAITING.isEmpty()) {
+				swallowUntil = tickNow + 10;
+				resolveCheck(lm.group(1).equalsIgnoreCase(Minecraft.getInstance().getUser().getName()));
+				return false;
+			}
+			if (text.contains("You are not currently in a party")) {
+				WAITING.clear();
+				return false;
+			}
+			return !(text.startsWith("-----") || text.isBlank() || text.startsWith("Party Members")
+				|| text.startsWith("Party Moderators") || text.startsWith("Party Leader"));
+		});
+
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> dispatcher.register(
+			ClientCommands.literal("pfp")
+				.executes(c -> { openGui = true; return 1; })
+				.then(addNode("add", PfpConfig.BOTH))
+				.then(addNode("dungeon", PfpConfig.DUNGEON))
+				.then(addNode("kuudra", PfpConfig.KUUDRA))
+				.then(ClientCommands.literal("remove")
+					.then(ClientCommands.argument("name", StringArgumentType.word()).executes(PfpClient::remove)))
+				.then(ClientCommands.literal("list").executes(PfpClient::show))
+				.then(ClientCommands.literal("apikey")
+					.then(ClientCommands.argument("key", StringArgumentType.word()).executes(c -> {
+						String k = StringArgumentType.getString(c, "key");
+						PfpConfig.apiKey = k.equalsIgnoreCase("clear") ? "" : k;
+						PfpConfig.save();
+						return say(c, PfpConfig.apiKey.isEmpty() ? "API key removed" : "API key saved (it is never shown again)", ChatFormatting.GREEN);
+					})))
+				.then(ClientCommands.literal("debug")
+					.then(ClientCommands.literal("on").executes(c -> { PfpConfig.debug = true; PfpConfig.save(); return say(c, "Debug log on: config/pfp_debug.log", ChatFormatting.GREEN); }))
+					.then(ClientCommands.literal("off").executes(c -> { PfpConfig.debug = false; PfpConfig.save(); return say(c, "Debug log off", ChatFormatting.GREEN); })))
+				.then(ClientCommands.literal("tag")
+					.then(ClientCommands.argument("name", StringArgumentType.word())
+						.then(ClientCommands.argument("tag", StringArgumentType.word())
+							.suggests((c, b) -> { for (String t : PfpConfig.TAGS) b.suggest(t); b.suggest("none"); return b.buildFuture(); })
+							.executes(PfpClient::tag))))
+				.then(ClientCommands.literal("msg")
+					.then(msgNode("kick", t -> PfpConfig.kickMsg = t))
+					.then(msgNode("add", t -> PfpConfig.addMsg = t)))
+				.then(ClientCommands.literal("coords").executes(c -> { sendCoords(); return 1; }))
+				.then(ClientCommands.literal("gui").executes(c -> { openGui = true; return 1; }))));
+	}
+
+	private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> addNode(String literal, String mode) {
+		return ClientCommands.literal(literal)
+			.then(ClientCommands.argument("name", StringArgumentType.word())
+				.executes(c -> add(c, "blacklisted", mode))
+				.then(ClientCommands.argument("reason", StringArgumentType.greedyString())
+					.executes(c -> add(c, StringArgumentType.getString(c, "reason"), mode))));
+	}
+
+	private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> msgNode(String literal, java.util.function.Consumer<String> setter) {
+		return ClientCommands.literal(literal)
+			.then(ClientCommands.argument("text", StringArgumentType.greedyString()).executes(c -> {
+				setter.accept(StringArgumentType.getString(c, "text"));
+				PfpConfig.save();
+				return say(c, "Text saved (\"[PFP]\" is always added in front)", ChatFormatting.GREEN);
+			}));
+	}
+
+	private static int add(CommandContext<FabricClientCommandSource> c, String reason, String mode) {
+		String name = StringArgumentType.getString(c, "name");
+		PfpConfig.Parsed p = PfpConfig.parse(reason);
+		String r = p.reason().isEmpty() ? "blacklisted" : p.reason();
+		PfpConfig.add(name, r, mode, p.days());
+		announceAdded(name, r);
+		String dur = p.days() == null ? "" : p.days() == 0 ? ", permanent" : ", " + p.days() + " D";
+		return say(c, name + " added (" + PfpConfig.modeLabel(mode) + dur + "): " + r, ChatFormatting.GREEN);
+	}
+
+	private static int tag(CommandContext<FabricClientCommandSource> c) {
+		String name = StringArgumentType.getString(c, "name");
+		String t = StringArgumentType.getString(c, "tag");
+		if (t.equalsIgnoreCase("none")) {
+			PfpConfig.tags.remove(PfpConfig.key(name));
+			PfpConfig.save();
+			return say(c, "Tag removed from " + name, ChatFormatting.GREEN);
+		}
+		for (String known : PfpConfig.TAGS) {
+			if (known.equalsIgnoreCase(t)) {
+				PfpConfig.tags.put(PfpConfig.key(name), known);
+				PfpConfig.save();
+				return say(c, name + " tagged " + known, ChatFormatting.GREEN);
+			}
+		}
+		return say(c, "Unknown tag. Use: " + String.join(", ", PfpConfig.TAGS) + ", none", ChatFormatting.RED);
+	}
+
+	private static int remove(CommandContext<FabricClientCommandSource> c) {
+		String name = StringArgumentType.getString(c, "name");
+		boolean ok = PfpConfig.remove(name);
+		return say(c, ok ? name + " removed" : name + " is not on the list", ok ? ChatFormatting.GREEN : ChatFormatting.RED);
+	}
+
+	private static int show(CommandContext<FabricClientCommandSource> c) {
+		if (PfpConfig.entries.isEmpty()) return say(c, "The list is empty", ChatFormatting.GRAY);
+		PfpConfig.entries.values().forEach(e -> say(c, e.name() + " [" + PfpConfig.modeLabel(e.mode()) + "] - " + e.reason(), ChatFormatting.AQUA));
+		return PfpConfig.entries.size();
+	}
+
+	private static int say(CommandContext<FabricClientCommandSource> c, String msg, ChatFormatting color) {
+		c.getSource().sendFeedback(Component.literal("[PFP] " + msg).withStyle(color));
+		return 1;
+	}
+}
