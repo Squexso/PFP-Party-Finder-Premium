@@ -55,6 +55,9 @@ public class PfpScreen extends Screen {
 		return super.keyPressed(event);
 	}
 
+	private FlatButton bangBtn;
+	private static boolean showBang; // right-click on "!pfp replies" lists the party chat commands
+
 	private static int gMode = 0; // gear tab: 0 list, 1 inventory, 2 presets
 	private static String gearText = "";
 
@@ -123,6 +126,8 @@ public class PfpScreen extends Screen {
 		listTop = y0 + HEAD_H;
 		int left = x0 + PAD;
 		textBoxes.clear();
+		bangBtn = null;
+		if (tab != 4) showBang = false;
 
 		int tw = IW / TAB_NAMES.length;
 		for (int i = 0; i < TAB_NAMES.length; i++) {
@@ -194,7 +199,7 @@ public class PfpScreen extends Screen {
 			int y = y0 + (compact ? 116 : 138);
 			int pitch = compact ? 22 : 24;
 			toggle(left, y, bw2, "Announce adds", () -> PfpConfig.announceAdd, () -> PfpConfig.announceAdd = !PfpConfig.announceAdd);
-			toggle(xr, y, wr, "!pfp replies", () -> PfpConfig.adEnabled, () -> PfpConfig.adEnabled = !PfpConfig.adEnabled);
+			bangBtn = toggle(xr, y, wr, "!pfp replies", () -> PfpConfig.adEnabled, () -> PfpConfig.adEnabled = !PfpConfig.adEnabled);
 			y += pitch;
 			toggle(left, y, bw2, "Tooltip warning", () -> PfpConfig.tooltipWarn, () -> PfpConfig.tooltipWarn = !PfpConfig.tooltipWarn);
 			toggle(xr, y, wr, "Show reason", () -> PfpConfig.tooltipReason, () -> PfpConfig.tooltipReason = !PfpConfig.tooltipReason);
@@ -568,6 +573,14 @@ public class PfpScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean dbl) {
+		if (tab == 4 && event.button() == 1 && bangBtn != null && bangBtn.isMouseOver(event.x(), event.y())) {
+			showBang = !showBang;
+			return true;
+		}
+		if (showBang) { // any other click closes the list
+			showBang = false;
+			return true;
+		}
 		if (tab != 4 && (event.button() == 0 || event.button() == 1)) {
 			for (Hit h : hits) {
 				if (event.x() >= h.x() && event.x() < h.x() + h.w() && event.y() >= h.y() && event.y() < h.y() + h.h()) {
@@ -669,6 +682,21 @@ public class PfpScreen extends Screen {
 			}
 		}
 		PfpTheme.draw(g, PfpTheme.fit("Joiners missing one of these are announced in party chat and kicked (leader only).", IW), l, y0 + panelH - 14, PfpTheme.MUTED);
+	}
+
+	@Override
+	public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float delta) {
+		super.extractRenderState(g, mx, my, delta);
+		if (!showBang || tab != 4 || bangBtn == null) return;
+		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26;
+		if (y + 70 > y0 + panelH) y = bangBtn.getY() - 76;
+		PfpTheme.round(g, x - 1, y - 1, w + 2, 72, PfpTheme.HAIR);
+		PfpTheme.round(g, x, y, w, 70, 0xFF1B1730);
+		PfpTheme.draw(g, PfpTheme.medium("Party chat commands"), x + 10, y + 8, PfpTheme.TEXT);
+		PfpTheme.draw(g, PfpTheme.medium("!pfp"), x + 10, y + 24, PfpTheme.PURPLE);
+		PfpTheme.draw(g, PfpTheme.fit("Replies: " + PfpClient.AD_TEXT, w - 64), x + 54, y + 24, PfpTheme.TEXT_2);
+		PfpTheme.draw(g, PfpTheme.fit("Only in party chat, at most once every 3 seconds.", w - 20), x + 10, y + 40, PfpTheme.MUTED);
+		PfpTheme.draw(g, PfpTheme.fit("The text is fixed. Click anywhere to close.", w - 20), x + 10, y + 52, PfpTheme.MUTED);
 	}
 
 	private void drawField(GuiGraphicsExtractor g, EditBox box) {

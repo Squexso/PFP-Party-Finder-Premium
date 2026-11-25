@@ -32,7 +32,7 @@ public class PfpClient implements ClientModInitializer {
 	private static int lastAd = -AD_COOLDOWN;
 
 	/** Fixed reply to "!pfp" (not editable). */
-	private static final String AD_TEXT = "look for PFP (26.2) by Squexso on Github";
+	static final String AD_TEXT = "look for PFP (26.2) by Squexso on Github";
 
 	private static boolean openGui = false;
 	private static net.minecraft.client.KeyMapping coordsKey;
