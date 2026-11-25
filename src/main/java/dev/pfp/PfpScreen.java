@@ -653,7 +653,7 @@ public class PfpScreen extends Screen {
 					if (id.isEmpty()) { g.fill(x + 1, y + 1, x + 17, y + 17, 0x99000000); continue; }
 					PfpConfig.Req r = new PfpConfig.Req();
 					r.id = id;
-					r.name = st.getHoverName().getString();
+					r.name = GearCheck.mainName(st.getHoverName().getString(), cd.copyTag().getStringOr("modifier", ""));
 					r.icon = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString();
 					slots.add(new Slot(x, y, 18, 18, r, st));
 					if (hasReq(id)) PfpTheme.draw(g, PfpTheme.text("+"), x + 11, y + 8, PfpTheme.GREEN);

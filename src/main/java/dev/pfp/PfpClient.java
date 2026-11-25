@@ -149,6 +149,12 @@ public class PfpClient implements ClientModInitializer {
 			partyMsg(OUT.remove(0));
 			outAt = tickNow + CHUNK_GAP;
 		}
+		if (!PLANS.isEmpty()) {
+			for (String n : new ArrayList<>(PLANS.keySet())) {
+				Plan pl = PLANS.get(n);
+				if (pl != null && pl.reqPending && tickNow - pl.created > PLAN_TIMEOUT) { pl.reqPending = false; fire(n); }
+			}
+		}
 		if (awaitEcho != null && tickNow >= echoDeadline) {
 			if (echoRetries++ < 2) {
 				player.connection.sendCommand("pc " + awaitEcho);
@@ -360,21 +366,55 @@ public class PfpClient implements ClientModInitializer {
 		}
 	}
 
+	/** Everything that speaks against one joining player: collected first, then one message and one kick. */
+	private static final class Plan {
+		final List<String> reasons = new ArrayList<>();
+		boolean reqPending;
+		PfpConfig.Entry base;
+		final int created = tickNow;
+	}
+
+	private static final java.util.Map<String, Plan> PLANS = new java.util.HashMap<>();
+	private static final java.util.Map<String, Integer> HANDLED = new java.util.HashMap<>(); // player -> ignore further reasons until this tick
+	private static final int HANDLED_FOR = 600; // ticks (30 s)
+	private static final int PLAN_TIMEOUT = 160; // ticks to wait for the requirement lookup
+
+	/** A player joined: blacklist hit (entry) and/or a requirement lookup that is running (req). */
+	private static void beginJoin(String name, PfpConfig.Entry entry, boolean req) {
+		String key = name.toLowerCase(Locale.ROOT);
+		Integer until = HANDLED.get(key);
+		if (until != null && tickNow < until) return;
+		Plan p = PLANS.computeIfAbsent(key, k -> new Plan());
+		if (entry != null) {
+			p.base = entry;
+			if (!p.reasons.contains(entry.reason())) p.reasons.add(entry.reason());
+		}
+		if (req) p.reqPending = true;
+		fire(name);
+	}
+
+	private static void fire(String name) {
+		String key = name.toLowerCase(Locale.ROOT);
+		Plan p = PLANS.get(key);
+		if (p == null || p.reqPending) return;
+		PLANS.remove(key);
+		if (p.reasons.isEmpty()) return;
+		HANDLED.put(key, tickNow + HANDLED_FOR);
+		PfpConfig.Entry b = p.base;
+		queueCheck(new PfpConfig.Entry(name, String.join(" | ", p.reasons),
+			b == null ? System.currentTimeMillis() : b.added(), b == null ? null : b.mode(), b == null ? null : b.days()));
+	}
+
 	/** Result of the requirement check: missing = null (unknown), "" (fine) or the list of missing items. */
 	static void requirementResult(String name, String missing) {
+		Plan p = PLANS.get(name.toLowerCase(Locale.ROOT));
+		if (p != null) p.reqPending = false;
 		if (missing == null) {
-			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed), not kicked.", ChatFormatting.YELLOW);
-		} else if (!missing.isEmpty()) {
-			if (isLeader == null) { // unknown: ask "/p list" first, then kick or warn
-				queueCheck(new PfpConfig.Entry(name, "does not meet the requirement: " + missing, System.currentTimeMillis(), null, null));
-			} else if (isLeader) {
-				partyMsg(name + " does not meet the requirement: " + missing);
-				PartyLog.kicked(name);
-				PENDING.add(new PendingKick(name, tickNow + KICK_DELAY, MAX_TRIES));
-			} else {
-				SecretTracker.chat(name + " does not meet the requirement: " + missing + " (you are not the leader or it is unknown, nobody kicked)", ChatFormatting.RED);
-			}
+			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed), not kicked for gear.", ChatFormatting.YELLOW);
+		} else if (!missing.isEmpty() && p != null) {
+			p.reasons.add("missing " + missing);
 		}
+		fire(name);
 	}
 
 	private static void notLeader(String name, String reason) {
@@ -438,6 +478,9 @@ public class PfpClient implements ClientModInitializer {
 			if (overlay || !PfpConfig.enabled) return;
 			String text = clean(message.getString());
 			if (awaitEcho != null && text.startsWith("Party >") && text.endsWith(awaitEcho)) awaitEcho = null;
+			Matcher gone = P_LEFT.matcher(text);
+			if (gone.find()) PENDING.removeIf(k -> k.name.equalsIgnoreCase(gone.group(1)));
+			if (text.toLowerCase(Locale.ROOT).contains("is not in your party")) PENDING.clear();
 			cancelIfKicked(text);
 			Matcher ad = PARTY_AD.matcher(text);
 			if (PfpConfig.adEnabled && ad.find() && tickNow - lastAd >= AD_COOLDOWN) {
@@ -455,14 +498,14 @@ public class PfpClient implements ClientModInitializer {
 				m = PARTY_JOIN.matcher(text);
 				if (!m.find()) return;
 			}
-			PartyLog.memberJoin(m.group(1), mode);
-			GearCheck.check(m.group(1));
+			String joined = m.group(1);
+			PartyLog.memberJoin(joined, mode);
 			PfpConfig.purge();
-			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(m.group(1)));
-			var player = Minecraft.getInstance().player;
-			if (player == null) return;
-			if (e == null || !PfpConfig.applies(e, mode)) return;
-			queueCheck(e);
+			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(joined));
+			if (e != null && !PfpConfig.applies(e, mode)) e = null;
+			if (Minecraft.getInstance().player == null) return;
+			boolean req = GearCheck.check(joined);
+			if (e != null || req) beginJoin(joined, e, req);
 		});
 
 		// Identical consecutive chat lines become one line with "(x2)", "(x3)", ...

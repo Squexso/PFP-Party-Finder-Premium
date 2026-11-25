@@ -17,15 +17,28 @@ final class GearCheck {
 
 	private GearCheck() { }
 
-	static void check(String name) {
-		if (PfpConfig.reqs.isEmpty() || name.equalsIgnoreCase(PartyLog.me())) return;
+	/** Starts the check; false when there is nothing to check (no requirements, or it is us). */
+	static boolean check(String name) {
+		if (PfpConfig.reqs.isEmpty() || name.equalsIgnoreCase(PartyLog.me())) return false;
 		java.util.List<PfpConfig.Req> req = new java.util.ArrayList<>(PfpConfig.reqs);
 		CompletableFuture.runAsync(() -> {
-			Set<String> ids = SecretTracker.gear(name);
+			Set<String> ids = null;
+			try {
+				ids = SecretTracker.gear(name);
+			} catch (RuntimeException ignored) { }
 			String missing = ids == null ? null : missing(req, ids);
 			if (PfpConfig.debug) PartyLog.debug("gear check " + name + " req=" + req.size() + " ids=" + (ids == null ? "unknown" : ids.size()) + " missing=" + missing);
 			Minecraft.getInstance().execute(() -> PfpClient.requirementResult(name, missing));
 		});
+		return true;
+	}
+
+	/** Main name of an item without reforge, stars or symbols ("Lustrous Divan's Drill" -> "Divan's Drill"). */
+	static String mainName(String hoverName, String reforge) {
+		String n = hoverName == null ? "" : hoverName;
+		if (reforge != null && !reforge.isEmpty() && n.toLowerCase(Locale.ROOT).startsWith(reforge.toLowerCase(Locale.ROOT) + " ")) n = n.substring(reforge.length() + 1);
+		n = n.replaceAll("[^\\p{L}\\p{N} '-]", "").replaceAll("\\s+", " ").trim();
+		return n.isEmpty() ? hoverName : n;
 	}
 
 	/** Names of the required items the player lacks, "" when all are present. */
