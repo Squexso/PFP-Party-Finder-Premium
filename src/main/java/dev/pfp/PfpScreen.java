@@ -109,11 +109,11 @@ public class PfpScreen extends Screen {
 		PW = Math.min(460, width - 12);
 		IW = PW - 2 * PAD;
 		rows = Math.max(2, Math.min(8, (height - 16 - HDR - HEAD_H - FOOT_H) / ROW_PITCH));
-		hRows = Math.max(2, Math.min(4, (height - 16 - HDR - 52 - 40) / H_PITCH));
+		hRows = Math.max(2, Math.min(4, (height - 16 - HDR - 68 - 36) / H_PITCH));
 		compact = height < 334 + HDR; // small screens / large GUI scale: tighter settings layout, no hints
 		panelH = switch (tab) {
 			case 0 -> Math.min(262, height - 16 - HDR);
-			case 2 -> 52 + hRows * H_PITCH + 36;
+			case 2 -> 68 + hRows * H_PITCH + 36;
 			case 3 -> Math.min(300, height - 16 - HDR);
 			case 4 -> compact ? 230 : 318;
 			default -> HEAD_H + FOOT_H + rows * ROW_PITCH - 4;
@@ -529,10 +529,10 @@ public class PfpScreen extends Screen {
 			}
 			return;
 		}
-		PfpTheme.draw(g, PfpTheme.text("Open a party to see details and tags"), l, y0 + panelH - 25, PfpTheme.MUTED);
+		PfpTheme.draw(g, PfpTheme.text("Open a party to see details and tags"), l, y0 + panelH - 23, PfpTheme.MUTED);
 		int pages = Math.max(1, (list.size() + hRows - 1) / hRows);
 		Component pt = PfpTheme.text((hPage + 1) + "/" + pages);
-		PfpTheme.draw(g, pt, l + IW - 33 - PfpTheme.width(pt) / 2 - 20, y0 + panelH - 25, PfpTheme.TEXT_2);
+		PfpTheme.draw(g, pt, l + IW - 33 - PfpTheme.width(pt) / 2 - 20, y0 + panelH - 23, PfpTheme.TEXT_2);
 		if (list.isEmpty()) {
 			Component a = PfpTheme.medium("No parties recorded yet");
 			PfpTheme.draw(g, a, x0 + (PW - PfpTheme.width(a)) / 2, y0 + 110, PfpTheme.TEXT_2);

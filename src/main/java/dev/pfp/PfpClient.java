@@ -46,7 +46,16 @@ public class PfpClient implements ClientModInitializer {
 		String msg = "[PFP] " + t;
 		if (msg.length() > 250) msg = msg.substring(0, 250);
 		player.connection.sendCommand("pc " + msg);
+		awaitEcho = msg;
+		echoRetries = 0;
+		echoDeadline = tickNow + ECHO_WAIT;
+		if (PfpConfig.debug) PartyLog.debug("sent party message: " + msg);
 	}
+
+	/** Hypixel sometimes drops a command: we expect our own message to come back in party chat, otherwise it is sent again. */
+	private static final int ECHO_WAIT = 14; // ticks
+	private static String awaitEcho;
+	private static int echoDeadline, echoRetries;
 
 	static void announceAdded(String name, String reason) {
 		if (PfpConfig.announceAdd) partyMsg(PfpConfig.format(PfpConfig.addMsg, name, reason));
@@ -85,8 +94,18 @@ public class PfpClient implements ClientModInitializer {
 			resolveCheck(true);
 			isLeader = null; // a guess, don't remember it
 		}
+		if (awaitEcho != null && tickNow >= echoDeadline) {
+			if (echoRetries++ < 2) {
+				player.connection.sendCommand("pc " + awaitEcho);
+				echoDeadline = tickNow + ECHO_WAIT;
+				if (PfpConfig.debug) PartyLog.debug("no echo, resent party message: " + awaitEcho);
+			} else {
+				awaitEcho = null;
+			}
+		}
 		PENDING.removeIf(k -> {
 			if (tickNow < k.sendAt) return false;
+			if (awaitEcho != null && tickNow < k.sendAt + 40) return false; // kick after the message was seen
 			player.connection.sendCommand("p kick " + k.name);
 			k.triesLeft--;
 			k.sendAt = tickNow + RETRY_GAP;
@@ -339,6 +358,7 @@ public class PfpClient implements ClientModInitializer {
 		guarded((message, overlay) -> {
 			if (overlay || !PfpConfig.enabled) return;
 			String text = clean(message.getString());
+			if (awaitEcho != null && text.startsWith("Party >") && text.endsWith(awaitEcho)) awaitEcho = null;
 			cancelIfKicked(text);
 			Matcher ad = PARTY_AD.matcher(text);
 			if (PfpConfig.adEnabled && ad.find() && tickNow - lastAd >= AD_COOLDOWN) {
