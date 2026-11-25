@@ -31,6 +31,8 @@ final class SecretTracker {
 	private static final Map<String, Integer> BASELINE = new ConcurrentHashMap<>();
 	private static final long AFTER_RUN_DELAY_S = 20; // the API lags behind the game
 	private static boolean warnedKey;
+	/** Deployed proxy/worker.js (it holds the API key). Empty = not deployed, players then use their own key. */
+	private static final String PROXY_URL = "";
 
 	private static final Map<String, Integer> CAPTURED = new ConcurrentHashMap<>();
 	private static final java.util.regex.Pattern COUNT = java.util.regex.Pattern.compile("^(\\w{1,16}): (\\d+)$");
@@ -62,7 +64,7 @@ final class SecretTracker {
 
 	private static boolean ready() {
 		if (!PfpConfig.secretTracker) return false;
-		if (PfpConfig.apiKey.isBlank() && !warnedKey) {
+		if (PROXY_URL.isEmpty() && PfpConfig.apiKey.isBlank() && !warnedKey) {
 			warnedKey = true;
 			chat("Secret tracker: only your own secrets can be read without an API key (/pfp apikey <key> for the others).", ChatFormatting.YELLOW);
 		}
@@ -82,7 +84,7 @@ final class SecretTracker {
 		CompletableFuture.runAsync(() -> {
 			BASELINE.putAll(ask());
 			for (String n : names) {
-				if (BASELINE.containsKey(n.toLowerCase()) || PfpConfig.apiKey.isBlank()) continue;
+				if (BASELINE.containsKey(n.toLowerCase()) || !hasApi()) continue;
 				Integer v = secrets(n);
 				if (v != null) BASELINE.put(n.toLowerCase(), v);
 			}
@@ -98,7 +100,7 @@ final class SecretTracker {
 			for (String n : names) {
 				Integer before = BASELINE.get(n.toLowerCase());
 				Integer after = before == null ? null : now.get(n.toLowerCase());
-				if (before != null && after == null && !PfpConfig.apiKey.isBlank()) after = secrets(n);
+				if (before != null && after == null && hasApi()) after = secrets(n);
 				if (before != null && after != null && after >= before) result.put(n, after - before);
 			}
 			Minecraft.getInstance().execute(() -> {
@@ -127,11 +129,21 @@ final class SecretTracker {
 		});
 	}
 
+	private static boolean hasApi() {
+		return !PROXY_URL.isEmpty() || !PfpConfig.apiKey.isBlank();
+	}
+
 	/** Total secrets (achievement skyblock_treasure_hunter) or null when it could not be read. */
 	private static Integer secrets(String name) {
 		try {
 			String uuid = uuid(name);
 			if (uuid == null) return null;
+			if (!PROXY_URL.isEmpty()) {
+				HttpResponse<String> p = HTTP.send(HttpRequest.newBuilder(URI.create(PROXY_URL + "/secrets/" + uuid))
+					.timeout(Duration.ofSeconds(10)).header("User-Agent", "PFP-Party-Finder-Premium").build(), HttpResponse.BodyHandlers.ofString());
+				if (p.statusCode() == 429) chat("Secret lookup rate limit reached.", ChatFormatting.RED);
+				return p.statusCode() == 200 ? JsonParser.parseString(p.body()).getAsJsonObject().get("secrets").getAsInt() : null;
+			}
 			HttpResponse<String> r = HTTP.send(HttpRequest.newBuilder(URI.create("https://api.hypixel.net/v2/player?uuid=" + uuid))
 				.timeout(Duration.ofSeconds(10)).header("API-Key", PfpConfig.apiKey).header("User-Agent", "PFP-Party-Finder-Premium").build(),
 				HttpResponse.BodyHandlers.ofString());
