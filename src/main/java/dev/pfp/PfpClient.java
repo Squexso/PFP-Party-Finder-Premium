@@ -27,7 +27,7 @@ public class PfpClient implements ClientModInitializer {
 	private static final Pattern PARTY_JOIN = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the party\\.");
 
 	/** "Party > [MVP+] Name: !pfp" */
-	private static final Pattern PARTY_AD = Pattern.compile("^\\s*Party\\s*>\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*:\\s*!pfp(?:\\s+(\\w{1,16}(?:\\s+list)?))?\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+	private static final Pattern PARTY_AD = Pattern.compile("^\\s*Party\\s*>\\s*(?:\\[[^\\]]+\\]\\s*)*(\\w{1,16})\\s*:\\s*!pfp(?:\\s+(\\w{1,16}(?:\\s+\\w{1,16})?))?\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	private static final int AD_COOLDOWN = 60; // Ticks (3 s)
 	private static int lastAd = -AD_COOLDOWN;
 
@@ -73,6 +73,16 @@ public class PfpClient implements ClientModInitializer {
 		String a = arg == null ? "" : arg.trim().toLowerCase(Locale.ROOT);
 		if (a.isEmpty()) {
 			partyMsg(AD_TEXT);
+		} else if (a.equals("help")) {
+			partyMsg("Commands: !pfp, !pfp list, !pfp full list, !pfp <name>, !pfp seen <name>, !pfp supplies, !pfp secrets");
+		} else if (a.equals("supplies")) {
+			partyMsg(PartyLog.suppliesText());
+		} else if (a.equals("secrets")) {
+			partyMsg(PartyLog.secretsText());
+		} else if (a.startsWith("seen ")) {
+			String who = arg.trim().substring(5).trim();
+			int c = PartyLog.seen(who);
+			partyMsg(c == 0 ? who + " was not in any of my recorded parties" : who + " was in " + c + " of my last " + PartyLog.recorded() + " parties");
 		} else if (a.equals("list")) {
 			int n = PfpConfig.entries.size();
 			partyMsg(n + (n == 1 ? " player is" : " players are") + " on my PFP list");

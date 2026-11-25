@@ -239,6 +239,62 @@ final class PartyLog {
 		}
 	}
 
+	/** In how many recorded parties (history, plus the running one) the player was. */
+	static int seen(String name) {
+		int c = (int) history.stream().filter(x -> name.equalsIgnoreCase(x.leader) || x.members.stream().anyMatch(name::equalsIgnoreCase)).count();
+		if (cur != null && !history.contains(cur) && (name.equalsIgnoreCase(cur.leader) || cur.members.stream().anyMatch(name::equalsIgnoreCase))) c++;
+		return c;
+	}
+
+	static int recorded() {
+		return history.size() + (cur != null && !history.contains(cur) ? 1 : 0);
+	}
+
+	/** Newest session of that type in which the run start was seen, or null. */
+	private static Session lastRun(String type) {
+		if (cur != null && type.equals(cur.type) && cur.ran) return cur;
+		for (Session x : history) if (type.equals(x.type) && x.ran) return x;
+		return null;
+	}
+
+	private static List<String> players(Session x) {
+		List<String> n = new ArrayList<>();
+		if (x.leader != null) n.add(x.leader);
+		for (String m : x.members) if (n.stream().noneMatch(m::equalsIgnoreCase)) n.add(m);
+		if (n.stream().noneMatch(me()::equalsIgnoreCase)) n.add(me());
+		return n;
+	}
+
+	/** Text for "!pfp supplies": supplies per player of the last Kuudra run. */
+	static String suppliesText() {
+		Session x = lastRun(PfpConfig.KUUDRA);
+		if (x == null) return "No Kuudra run recorded yet";
+		if (x.supplies == null) return "Kuudra supplies of the last run: unknown";
+		StringBuilder sb = new StringBuilder("Kuudra supplies of the last run: ");
+		boolean first = true;
+		for (String n : players(x)) {
+			Integer v = x.supplies.get(n);
+			sb.append(first ? "" : ", ").append(n).append(' ').append(v == null ? 0 : v);
+			first = false;
+		}
+		return sb.toString();
+	}
+
+	/** Text for "!pfp secrets": secrets per player of the last dungeon run, never a bare unconfirmed zero. */
+	static String secretsText() {
+		Session x = lastRun(PfpConfig.DUNGEON);
+		if (x == null) return "No dungeon run recorded yet";
+		if (x.secrets == null) return "Dungeon secrets of the last run: not available";
+		StringBuilder sb = new StringBuilder("Dungeon secrets of the last run: ");
+		boolean first = true;
+		for (String n : players(x)) {
+			Integer v = x.secrets.get(n);
+			sb.append(first ? "" : ", ").append(n).append(' ').append(v == null ? "unknown" : v == 0 ? "0 (unconfirmed)" : String.valueOf(v));
+			first = false;
+		}
+		return sb.toString();
+	}
+
 	private static void repeat(List<String> names) {
 		if (!PfpConfig.repeatAlerts) return;
 		for (String n : names) {

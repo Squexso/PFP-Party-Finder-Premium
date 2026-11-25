@@ -688,7 +688,7 @@ public class PfpScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float delta) {
 		super.extractRenderState(g, mx, my, delta);
 		if (!showBang || tab != 4 || bangBtn == null) return;
-		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26, h = 118;
+		int w = IW, x = x0 + PAD, y = bangBtn.getY() + 26, h = 26 + 8 * 15 + 22;
 		if (y + h > y0 + panelH) y = Math.max(y0 + 36, bangBtn.getY() - h - 6);
 		PfpTheme.round(g, x - 1, y - 1, w + 2, h + 2, PfpTheme.HAIR);
 		PfpTheme.round(g, x, y, w, h, 0xFF1B1730);
@@ -698,6 +698,10 @@ public class PfpScreen extends Screen {
 			{"!pfp list", "how many players are on my list"},
 			{"!pfp full list", "the names of all players on my list"},
 			{"!pfp <name>", "why the player is on my list, or not found"},
+			{"!pfp seen <name>", "in how many of my last parties"},
+			{"!pfp supplies", "Kuudra supplies per player, last run"},
+			{"!pfp secrets", "dungeon secrets per player, last run"},
+			{"!pfp help", "lists these commands"},
 		};
 		int cy = y + 26;
 		int cw = 0;
