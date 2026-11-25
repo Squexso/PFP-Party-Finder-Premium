@@ -207,6 +207,28 @@ public class PfpClient implements ClientModInitializer {
 		return false;
 	}
 
+	/** An error in our chat handlers must never reach the game (it would drop the connection as a protocol error). */
+	private static void guarded(ClientReceiveMessageEvents.Game h) {
+		ClientReceiveMessageEvents.GAME.register((m, o) -> {
+			try {
+				h.onReceiveGameMessage(m, o);
+			} catch (Throwable t) {
+				org.slf4j.LoggerFactory.getLogger("pfp").warn("chat handler failed", t);
+			}
+		});
+	}
+
+	private static void guardedAllow(ClientReceiveMessageEvents.AllowGame h) {
+		ClientReceiveMessageEvents.ALLOW_GAME.register((m, o) -> {
+			try {
+				return h.allowReceiveGameMessage(m, o);
+			} catch (Throwable t) {
+				org.slf4j.LoggerFactory.getLogger("pfp").warn("chat filter failed", t);
+				return true;
+			}
+		});
+	}
+
 	private static String clean(String s) {
 		return s.replace(' ', ' ').replaceAll("§.", "");
 	}
@@ -310,11 +332,11 @@ public class PfpClient implements ClientModInitializer {
 			}
 		});
 
-		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+		guarded((message, overlay) -> {
 			if (!overlay) trackParty(clean(message.getString()));
 		});
 
-		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+		guarded((message, overlay) -> {
 			if (overlay || !PfpConfig.enabled) return;
 			String text = clean(message.getString());
 			cancelIfKicked(text);
@@ -344,13 +366,13 @@ public class PfpClient implements ClientModInitializer {
 		});
 
 		// Identical consecutive chat lines become one line with "(x2)", "(x3)", ...
-		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
+		guardedAllow((message, overlay) -> {
 			if (overlay || !PfpConfig.stackChat) return true;
 			return !stack(message);
 		});
 
 		// While waiting for the "/p list" answer, hide that list from the chat.
-		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
+		guardedAllow((message, overlay) -> {
 			if (overlay) return true;
 			if (SecretTracker.capture(clean(message.getString()))) return false;
 			if (WAITING.isEmpty() && tickNow >= swallowUntil) return true;
