@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.util.FormattedCharSequence;
 
 public class PfpScreen extends Screen {
@@ -28,7 +29,7 @@ public class PfpScreen extends Screen {
 	private String reasonText = "";
 	private EditBox nameBox, reasonBox;
 	private boolean listening = false;
-	private static int tab = 1; // 0 Overview, 1 Blacklist, 2 History, 3 Settings
+	private static int tab = 1; // 0 Overview, 1 Blacklist, 2 History, 3 Gear, 4 Settings
 	private static int hFilter = 0; // 0 all, 1 dungeons, 2 kuudra
 	private static int hSel = -1; // selected history row (index into the filtered list), -1 = list
 	private int hPage;
@@ -53,8 +54,43 @@ public class PfpScreen extends Screen {
 		return super.keyPressed(event);
 	}
 
-	private static final String[] TAB_NAMES = {"Overview", "Blacklist", "History", "Settings"};
-	private static final int[] TAB_W = {54, 56, 48, 52};
+	private static int gMode = 0; // gear tab: 0 list, 1 inventory, 2 presets
+	private static String gearText = "";
+
+	private record Slot(int x, int y, int w, int h, PfpConfig.Req req, ItemStack stack) { }
+
+	private final List<Slot> slots = new ArrayList<>();
+	private static final java.util.Map<String, ItemStack> ICONS = new java.util.HashMap<>();
+
+	private static final String[][] PRESETS = {
+		{"Terminator", "TERMINATOR", "minecraft:bow"}, {"Juju Shortbow", "JUJU_SHORTBOW", "minecraft:bow"},
+		{"Last Breath", "LAST_BREATH", "minecraft:bow"}, {"Hyperion", "HYPERION", "minecraft:iron_sword"},
+		{"Livid Dagger", "LIVID_DAGGER", "minecraft:iron_sword"}, {"Giants Sword", "GIANTS_SWORD", "minecraft:iron_sword"},
+		{"Claymore", "CLAYMORE", "minecraft:iron_sword"}, {"Bonemerang", "BONE_BOOMERANG", "minecraft:bone"},
+		{"Spirit Mask", "SPIRIT_MASK", "minecraft:player_head"}, {"Bonzo Mask", "BONZO_MASK", "minecraft:player_head"},
+	};
+
+	private static ItemStack icon(String id) {
+		return ICONS.computeIfAbsent(id, k -> {
+			var ident = net.minecraft.resources.Identifier.tryParse(k);
+			ItemStack st = ident == null ? ItemStack.EMPTY : new ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(ident));
+			return st.isEmpty() ? new ItemStack(net.minecraft.world.item.Items.PAPER) : st;
+		});
+	}
+
+	private static boolean hasReq(String id) {
+		for (PfpConfig.Req r : PfpConfig.reqs) if (r.id.equalsIgnoreCase(id)) return true;
+		return false;
+	}
+
+	private void addReq(PfpConfig.Req r) {
+		if (hasReq(r.id)) return;
+		PfpConfig.reqs.add(r);
+		PfpConfig.save();
+	}
+
+	private static final String[] TAB_NAMES = {"Overview", "Blacklist", "History", "Gear", "Settings"};
+	private static final int[] TAB_W = {54, 56, 48, 40, 52};
 	private static final int H_PITCH = 36;
 	private int hRows = 4;
 	private boolean compact;
@@ -73,11 +109,12 @@ public class PfpScreen extends Screen {
 		IW = PW - 2 * PAD;
 		rows = Math.max(2, Math.min(8, (height - 16 - HEAD_H - FOOT_H) / ROW_PITCH));
 		hRows = Math.max(2, Math.min(4, (height - 16 - 52 - 40) / H_PITCH));
-		compact = height < 376; // small screens / large GUI scale: tighter settings layout, no hints
+		compact = height < 334; // small screens / large GUI scale: tighter settings layout, no hints
 		panelH = switch (tab) {
 			case 0 -> Math.min(262, height - 16);
 			case 2 -> 52 + hRows * H_PITCH + 36;
-			case 3 -> compact ? 270 : 360;
+			case 3 -> Math.min(300, height - 16);
+			case 4 -> compact ? 230 : 318;
 			default -> HEAD_H + FOOT_H + rows * ROW_PITCH - 4;
 		};
 		x0 = (width - PW) / 2;
@@ -119,6 +156,34 @@ public class PfpScreen extends Screen {
 		}
 
 		if (tab == 3) {
+			int bw = IW - 66;
+			textBoxes.add(field(left, y0 + 38, bw, "Add item by name or id (e.g. Term)", 40, gearText, v -> gearText = v));
+			addRenderableWidget(new FlatButton(left + bw + 6, y0 + 39, 60, 20, "Add", FlatButton.Style.NORMAL, null, () -> {
+				String t = gearText.trim();
+				if (!t.isEmpty()) { addReq(GearCheck.req(t)); gearText = ""; }
+				rebuildWidgets();
+			}));
+			String[] gm = {"My list", "Inventory", "Presets"};
+			for (int i = 0; i < 3; i++) {
+				int idx = i;
+				addRenderableWidget(new FlatButton(left + i * 84, y0 + 66, 80, 20, gm[i],
+					gMode == i ? FlatButton.Style.TAB_ON : FlatButton.Style.NORMAL, null, () -> { gMode = idx; rebuildWidgets(); }));
+			}
+			if (gMode == 0) {
+				int max = Math.max(1, (panelH - 92 - 30) / 22);
+				for (int i = 0; i < Math.min(max, PfpConfig.reqs.size()); i++) {
+					PfpConfig.Req r = PfpConfig.reqs.get(i);
+					addRenderableWidget(new FlatButton(left + IW - 22, y0 + 92 + i * 22 + 1, 20, 18, "x", FlatButton.Style.NORMAL, null, () -> {
+						PfpConfig.reqs.remove(r);
+						PfpConfig.save();
+						rebuildWidgets();
+					}));
+				}
+			}
+			return;
+		}
+
+		if (tab == 4) {
 			int f1 = compact ? 46 : 52;
 			int f2 = compact ? 84 : 96;
 			textBoxes.add(field(left, y0 + f1, IW, "Kick message", 150, PfpConfig.kickMsg, v -> { PfpConfig.kickMsg = v; PfpConfig.save(); }));
@@ -146,7 +211,6 @@ public class PfpScreen extends Screen {
 			addRenderableWidget(new FlatButton(left, y, IW, 20,
 				listening ? "Press a key ..." : "Coords key: " + PfpClient.coordsKeyName(),
 				listening ? FlatButton.Style.TAB_ON : FlatButton.Style.NORMAL, null, () -> { listening = true; rebuildWidgets(); }));
-			textBoxes.add(field(left, y + (compact ? 40 : 46), IW, "Requirement", 100, PfpConfig.requirement, v -> { PfpConfig.requirement = v; PfpConfig.save(); }));
 			return;
 		}
 
@@ -255,7 +319,8 @@ public class PfpScreen extends Screen {
 		hits.clear();
 		if (tab == 0) { drawOverview(g); return; }
 		if (tab == 2) { drawHistory(g, mouseX, mouseY); return; }
-		if (tab == 3) { drawSettings(g); return; }
+		if (tab == 3) { drawGear(g, mouseX, mouseY); return; }
+		if (tab == 4) { drawSettings(g); return; }
 
 		int left = x0 + PAD;
 		int right = left + IW;
@@ -481,24 +546,35 @@ public class PfpScreen extends Screen {
 
 	private void drawSettings(GuiGraphicsExtractor g) {
 		int l = x0 + PAD;
-		String[] labels = {"When someone is kicked", "When someone is added", "Required items for joiners (e.g. Term, Juju), others are kicked"};
-		for (int i = 0; i < 3; i++) {
+		String[] labels = {"When someone is kicked", "When someone is added"};
+		for (int i = 0; i < 2; i++) {
 			EditBox box = textBoxes.get(i);
 			PfpTheme.draw(g, PfpTheme.fit(labels[i], IW), l, box.getY() - 19, PfpTheme.TEXT_2);
 			drawField(g, box);
 		}
 		if (compact) return;
-		PfpTheme.draw(g, PfpTheme.fit("[PFP] " + PfpConfig.format(PfpConfig.kickMsg, "Name", "Reason"), IW), l, y0 + 330, PfpTheme.PURPLE);
+		PfpTheme.draw(g, PfpTheme.fit("[PFP] " + PfpConfig.format(PfpConfig.kickMsg, "Name", "Reason"), IW), l, y0 + 288, PfpTheme.PURPLE);
 		String key = PfpConfig.apiKey.isBlank() ? "no API key (/pfp apikey <key>)" : "API key set";
-		PfpTheme.draw(g, PfpTheme.fit("{name} {reason} are replaced, [PFP] always first. Secret tracker: " + key, IW), l, y0 + 342, PfpTheme.MUTED);
+		PfpTheme.draw(g, PfpTheme.fit("{name} {reason} are replaced, [PFP] always first. Secret tracker: " + key, IW), l, y0 + 300, PfpTheme.MUTED);
 	}
 
 	@Override
 	public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean dbl) {
-		if (tab != 3 && (event.button() == 0 || event.button() == 1)) {
+		if (tab != 4 && (event.button() == 0 || event.button() == 1)) {
 			for (Hit h : hits) {
 				if (event.x() >= h.x() && event.x() < h.x() + h.w() && event.y() >= h.y() && event.y() < h.y() + h.h()) {
 					cycleTag(h.name(), event.button() == 1);
+					return true;
+				}
+			}
+		}
+		if (tab == 3 && gMode != 0 && event.button() == 0) {
+			for (Slot sl : slots) {
+				if (event.x() >= sl.x() && event.x() < sl.x() + sl.w() && event.y() >= sl.y() && event.y() < sl.y() + sl.h()) {
+					PfpConfig.Req r = sl.req();
+					if (hasReq(r.id)) PfpConfig.reqs.removeIf(q -> q.id.equalsIgnoreCase(r.id));
+					else PfpConfig.reqs.add(r);
+					PfpConfig.save();
 					return true;
 				}
 			}
@@ -517,6 +593,74 @@ public class PfpScreen extends Screen {
 			}
 		}
 		return super.mouseClicked(event, dbl);
+	}
+
+	private void drawGear(GuiGraphicsExtractor g, int mx, int my) {
+		int l = x0 + PAD;
+		drawField(g, textBoxes.get(0));
+		slots.clear();
+		int top = y0 + 92;
+		if (gMode == 0) {
+			if (PfpConfig.reqs.isEmpty()) {
+				PfpTheme.draw(g, PfpTheme.fit("No items yet. Type a name above, pick one from your inventory or use a preset.", IW), l, top + 4, PfpTheme.MUTED);
+			}
+			int max = Math.max(1, (panelH - 92 - 30) / 22);
+			for (int i = 0; i < Math.min(max, PfpConfig.reqs.size()); i++) {
+				PfpConfig.Req r = PfpConfig.reqs.get(i);
+				int y = top + i * 22;
+				PfpTheme.round(g, l, y, IW - 26, 20, PfpTheme.FIELD);
+				g.item(icon(r.icon), l + 4, y + 2);
+				Component nm = PfpTheme.medium(r.name);
+				PfpTheme.draw(g, nm, l + 26, y + 6, PfpTheme.TEXT);
+				PfpTheme.draw(g, PfpTheme.fit(r.id, IW - 26 - 40 - PfpTheme.width(nm)), l + 32 + PfpTheme.width(nm), y + 6, PfpTheme.MUTED);
+			}
+		} else if (gMode == 1) {
+			PfpTheme.draw(g, PfpTheme.text("Click an item in your inventory to require it"), l, top, PfpTheme.TEXT_2);
+			var player = net.minecraft.client.Minecraft.getInstance().player;
+			if (player != null) {
+				var inv = player.getInventory().getNonEquipmentItems();
+				for (int i = 0; i < 36; i++) {
+					int row = i < 9 ? 3 : (i - 9) / 9;
+					int col = i % 9;
+					int x = l + col * 20, y = top + 14 + row * 20;
+					ItemStack st = inv.get(i);
+					PfpTheme.round(g, x, y, 18, 18, PfpTheme.FIELD);
+					if (st.isEmpty()) continue;
+					var cd = st.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+					String id = cd == null ? "" : cd.copyTag().getStringOr("id", "");
+					g.item(st, x + 1, y + 1);
+					if (id.isEmpty()) { g.fill(x + 1, y + 1, x + 17, y + 17, 0x99000000); continue; }
+					PfpConfig.Req r = new PfpConfig.Req();
+					r.id = id;
+					r.name = st.getHoverName().getString();
+					r.icon = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString();
+					slots.add(new Slot(x, y, 18, 18, r, st));
+					if (hasReq(id)) PfpTheme.draw(g, PfpTheme.text("+"), x + 11, y + 8, PfpTheme.GREEN);
+				}
+			}
+		} else {
+			PfpTheme.draw(g, PfpTheme.text("Click a preset to add or remove it"), l, top, PfpTheme.TEXT_2);
+			int cw = (IW - 6) / 2;
+			for (int i = 0; i < PRESETS.length; i++) {
+				int x = l + (i % 2) * (cw + 6), y = top + 14 + (i / 2) * 22;
+				String[] p = PRESETS[i];
+				boolean on = hasReq(p[1]);
+				PfpTheme.round(g, x, y, cw, 20, on ? PfpTheme.FIELD_FOCUS : PfpTheme.FIELD);
+				g.item(icon(p[2]), x + 4, y + 2);
+				PfpTheme.draw(g, PfpTheme.text(p[0]), x + 26, y + 6, on ? PfpTheme.GREEN : PfpTheme.TEXT);
+				PfpConfig.Req r = new PfpConfig.Req();
+				r.name = p[0];
+				r.id = p[1];
+				r.icon = p[2];
+				slots.add(new Slot(x, y, cw, 20, r, null));
+			}
+		}
+		for (Slot sl : slots) {
+			if (sl.stack() != null && mx >= sl.x() && mx < sl.x() + sl.w() && my >= sl.y() && my < sl.y() + sl.h()) {
+				g.setTooltipForNextFrame(font, sl.stack(), mx, my);
+			}
+		}
+		PfpTheme.draw(g, PfpTheme.fit("Joiners missing one of these are announced in party chat and kicked (leader only).", IW), l, y0 + panelH - 14, PfpTheme.MUTED);
 	}
 
 	private void drawField(GuiGraphicsExtractor g, EditBox box) {

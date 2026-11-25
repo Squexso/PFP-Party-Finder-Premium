@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -79,6 +81,11 @@ public final class PfpConfig {
 	public static boolean debug = false;
 	/** Items every joining player must own (comma separated, e.g. "Term"). Empty = off. */
 	public static String requirement = "";
+	/** Required items for joiners (id = SkyBlock item id, icon = vanilla item id used for the picture). */
+	public static final class Req {
+		public String id, name, icon;
+	}
+	public static List<Req> reqs = new ArrayList<>();
 	/** Local player tags (lowercase name -> tag), separate from the blacklist. */
 	public static Map<String, String> tags = new LinkedHashMap<>();
 	public static final String[] TAGS = {"Trusted", "Friend", "Toxic", "Carry", "Suspicious"};
@@ -121,6 +128,7 @@ public final class PfpConfig {
 		String apiKey = "";
 		boolean debug = false;
 		String requirement = "";
+		List<Req> reqs = new ArrayList<>();
 		Map<String, String> tags = new LinkedHashMap<>();
 	}
 
@@ -151,6 +159,11 @@ public final class PfpConfig {
 				if (d.apiKey != null) apiKey = d.apiKey;
 				debug = d.debug;
 				if (d.requirement != null) requirement = d.requirement;
+				if (d.reqs != null) reqs = d.reqs;
+				if (reqs.isEmpty() && !requirement.isBlank()) { // old single text field -> list
+					for (String t : requirement.split(",")) if (!t.isBlank()) reqs.add(GearCheck.req(t.trim()));
+				}
+				requirement = "";
 				if (d.tags != null) tags = d.tags;
 			} else { // altes Format: reine Map
 				Map<String, Entry> old = GSON.fromJson(o, MAP_TYPE);
@@ -183,7 +196,8 @@ public final class PfpConfig {
 		d.secretTracker = secretTracker;
 		d.apiKey = apiKey;
 		d.debug = debug;
-		d.requirement = requirement;
+		d.requirement = "";
+		d.reqs = reqs;
 		d.tags = tags;
 		try {
 			Files.writeString(FILE, GSON.toJson(d));
