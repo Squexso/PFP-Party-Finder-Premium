@@ -18,8 +18,8 @@ final class GearCheck {
 
 	private GearCheck() { }
 
-	/** Starts the check; false when there is nothing to check (no requirements, or it is us). */
-	static boolean check(String name) {
+	/** Starts the check and reports a breakdown in chat; false when there is nothing to check (no requirements, or it is us). */
+	static boolean check(String name, String cls) {
 		if (PfpConfig.reqs.isEmpty() || name.equalsIgnoreCase(PartyLog.me())) return false;
 		java.util.List<PfpConfig.Req> req = new java.util.ArrayList<>(PfpConfig.reqs);
 		CompletableFuture.runAsync(() -> {
@@ -27,9 +27,9 @@ final class GearCheck {
 			try {
 				ids = SecretTracker.gear(name);
 			} catch (RuntimeException ignored) { }
-			String missing = ids == null ? null : missing(req, ids);
-			if (PfpConfig.debug) PartyLog.debug("gear check " + name + " req=" + req.size() + " ids=" + (ids == null ? "unknown" : ids.size()) + " missing=" + missing);
-			Minecraft.getInstance().execute(() -> PfpClient.requirementResult(name, missing));
+			boolean[] has = ids == null ? null : have(req, ids);
+			if (PfpConfig.debug) PartyLog.debug("gear check " + name + " req=" + req.size() + " ids=" + (ids == null ? "unknown" : ids.size()) + " missing=" + (has == null ? null : missing(req, has)));
+			Minecraft.getInstance().execute(() -> PfpClient.requirementResult(name, cls, req, has));
 		});
 		return true;
 	}
@@ -42,13 +42,18 @@ final class GearCheck {
 		return n.isEmpty() ? hoverName : n;
 	}
 
+	/** For every requirement: does the player own it (any alternative of "A|B|C" counts). */
+	static boolean[] have(java.util.List<PfpConfig.Req> req, Set<String> ids) {
+		boolean[] has = new boolean[req.size()];
+		for (int i = 0; i < has.length; i++)
+			has[i] = java.util.Arrays.stream(req.get(i).id.split("\\|")).anyMatch(alt -> ids.stream().anyMatch(id -> id.contains(alt)));
+		return has;
+	}
+
 	/** Names of the required items the player lacks, "" when all are present. */
-	static String missing(java.util.List<PfpConfig.Req> req, Set<String> ids) {
+	static String missing(java.util.List<PfpConfig.Req> req, boolean[] has) {
 		StringBuilder out = new StringBuilder();
-		for (PfpConfig.Req r : req) {
-			boolean has = java.util.Arrays.stream(r.id.split("\\|")).anyMatch(alt -> ids.stream().anyMatch(id -> id.contains(alt)));
-			if (!has) out.append(out.isEmpty() ? "" : ", ").append(r.name);
-		}
+		for (int i = 0; i < has.length; i++) if (!has[i]) out.append(out.isEmpty() ? "" : ", ").append(req.get(i).name);
 		return out.toString();
 	}
 

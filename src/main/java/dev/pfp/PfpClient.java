@@ -22,6 +22,8 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 
 public class PfpClient implements ClientModInitializer {
 	/** "Party Finder > Name joined the dungeon group! (...)" / "... joined the group! (...)" (Kuudra). */
+	private static final Pattern CLASS_OF = Pattern.compile("\\((\\w+) Level \\d+\\)");
+	private static final java.util.Map<String, String> MISSING = new java.util.HashMap<>();
 	private static final Pattern PF_JOIN = Pattern.compile("^Party Finder > (?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the .*?group!");
 	/** "[MVP+] Name joined the party." (Einladungen) */
 	private static final Pattern PARTY_JOIN = Pattern.compile("^(?:\\[[^\\]]+\\] )?(\\w{1,16}) joined the party\\.");
@@ -457,16 +459,32 @@ public class PfpClient implements ClientModInitializer {
 			b == null ? System.currentTimeMillis() : b.added(), b == null ? null : b.mode(), b == null ? null : b.days()));
 	}
 
-	/** Result of the requirement check: missing = null (unknown), "" (fine) or the list of missing items. */
-	static void requirementResult(String name, String missing) {
-		Plan p = PLANS.get(name.toLowerCase(Locale.ROOT));
-		if (p != null) p.reqPending = false;
-		if (missing == null) {
-			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed), not kicked for gear.", ChatFormatting.YELLOW);
-		} else if (!missing.isEmpty() && p != null) {
-			p.reasons.add("missing " + missing);
+	/** Result of the requirement check: a breakdown in chat; the player is only kicked when the user clicks "Kick Player?". has = null: unknown. */
+	static void requirementResult(String name, String cls, List<PfpConfig.Req> req, boolean[] has) {
+		if (has == null) {
+			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed).", ChatFormatting.YELLOW);
+			return;
 		}
-		fire(name);
+		var mc = Minecraft.getInstance();
+		if (mc.player == null) return;
+		boolean all = true;
+		for (boolean h : has) all &= h;
+		mc.player.sendSystemMessage(Component.literal("[PFP] ").withStyle(ChatFormatting.LIGHT_PURPLE)
+			.append(Component.literal(name + (cls == null ? "" : " is " + cls.toUpperCase(Locale.ROOT))).withStyle(ChatFormatting.WHITE)));
+		for (int i = 0; i < has.length; i++) {
+			mc.player.sendSystemMessage(Component.literal("  " + req.get(i).name + " ").withStyle(ChatFormatting.GRAY)
+				.append(Component.literal(has[i] ? "✔" : "✘").withStyle(has[i] ? ChatFormatting.GREEN : ChatFormatting.RED)));
+		}
+		if (all) return;
+		MISSING.put(name.toLowerCase(Locale.ROOT), GearCheck.missing(req, has));
+		mc.player.sendSystemMessage(Component.literal("  [Kick Player?]").withStyle(s -> s.withColor(ChatFormatting.RED).withBold(true)
+			.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand("/pfp kick " + name))));
+	}
+
+	private static int kickMissing(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> c) {
+		String name = StringArgumentType.getString(c, "name");
+		queueCheck(new PfpConfig.Entry(name, "missing " + MISSING.getOrDefault(name.toLowerCase(Locale.ROOT), "gear"), System.currentTimeMillis(), null, null));
+		return 1;
 	}
 
 	private static void notLeader(String name, String reason) {
@@ -556,8 +574,9 @@ public class PfpClient implements ClientModInitializer {
 			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(joined));
 			if (e != null && !PfpConfig.applies(e, mode)) e = null;
 			if (Minecraft.getInstance().player == null) return;
-			boolean req = GearCheck.check(joined);
-			if (e != null || req) beginJoin(joined, e, req);
+			Matcher cm = CLASS_OF.matcher(text);
+			GearCheck.check(joined, cm.find() ? cm.group(1) : null);
+			if (e != null) beginJoin(joined, e, false);
 		});
 
 		// Identical consecutive chat lines become one line with "(x2)", "(x3)", ...
@@ -630,6 +649,8 @@ public class PfpClient implements ClientModInitializer {
 				.then(ClientCommands.literal("msg")
 					.then(msgNode("kick", t -> PfpConfig.kickMsg = t))
 					.then(msgNode("add", t -> PfpConfig.addMsg = t)))
+				.then(ClientCommands.literal("kick")
+					.then(ClientCommands.argument("name", StringArgumentType.word()).executes(PfpClient::kickMissing)))
 				.then(ClientCommands.literal("coords").executes(c -> { sendCoords(); return 1; }))
 				.then(ClientCommands.literal("gui").executes(c -> { openGui = true; return 1; }))));
 	}
