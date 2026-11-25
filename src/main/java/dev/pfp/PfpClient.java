@@ -289,7 +289,9 @@ public class PfpClient implements ClientModInitializer {
 		if (missing == null) {
 			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed), not kicked.", ChatFormatting.YELLOW);
 		} else if (!missing.isEmpty()) {
-			if (Boolean.TRUE.equals(isLeader)) {
+			if (isLeader == null) { // unknown: ask "/p list" first, then kick or warn
+				queueCheck(new PfpConfig.Entry(name, "does not meet the requirement: " + missing, System.currentTimeMillis(), null, null));
+			} else if (isLeader) {
 				partyMsg(name + " does not meet the requirement: " + missing);
 				PartyLog.kicked(name);
 				PENDING.add(new PendingKick(name, tickNow + KICK_DELAY, MAX_TRIES));
@@ -370,6 +372,7 @@ public class PfpClient implements ClientModInitializer {
 			Matcher m = PF_JOIN.matcher(text);
 			if (m.find()) {
 				mode = text.contains("dungeon group") ? PfpConfig.DUNGEON : PfpConfig.KUUDRA;
+				isLeader = true; // only the leader of a Party Finder group sees "X joined the group!"
 			} else {
 				if (PfpConfig.pfOnly) return;
 				m = PARTY_JOIN.matcher(text);
