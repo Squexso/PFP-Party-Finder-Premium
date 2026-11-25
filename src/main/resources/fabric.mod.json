@@ -4,7 +4,7 @@
 	"version": "${version}",
 	"name": "PFP Party Finder Premium",
 	"description": "Blacklist, auto-kick and party tools for Hypixel SkyBlock dungeons and Kuudra: party history, player tags, repeat alerts, gear requirements and !pfp party commands.",
-	"authors": ["Squexso"],
+	"authors": ["Squexso", "ScaredOfWipe"],
 	"contact": {
 		"homepage": "https://github.com/Squexso/PFP-Party-Finder-Premium",
 		"sources": "https://github.com/Squexso/PFP-Party-Finder-Premium",
