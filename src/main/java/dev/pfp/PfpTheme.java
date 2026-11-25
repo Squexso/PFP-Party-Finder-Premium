@@ -9,25 +9,28 @@ import net.minecraft.resources.Identifier;
 
 /** Farben (ARGB) und Schrift. Ruhige dunkle Flaeche, die Farbe steckt im Text. */
 final class PfpTheme {
-	static final int DIM = 0x66000000;
-	static final int PANEL = 0xE6131418;
-	static final int ROW = 0x14FFFFFF;
-	static final int FIELD = 0x1FFFFFFF;
-	static final int FIELD_FOCUS = 0x38FFFFFF;
-	static final int BTN = 0x26FFFFFF;
-	static final int BTN_HOT = 0x40FFFFFF;
+	static final int DIM = 0x88060410;
+	static final int PANEL = 0xF2151221;
+	static final int ROW = 0xFF1F1A30;
+	static final int FIELD = 0xFF272139;
+	static final int FIELD_FOCUS = 0xFF352C57;
+	static final int BTN = 0xFF2C2645;
+	static final int BTN_HOT = 0xFF3B3263;
+	static final int HAIR = 0x26FFFFFF;
 
-	static final int TEXT = 0xFFF2F2F2;
-	static final int TEXT_2 = 0xFFB4B8BF;
-	static final int MUTED = 0xFF80858D;
+	static final int TEXT = 0xFFF5F2FF;
+	static final int TEXT_2 = 0xFFC9C3E0;
+	static final int MUTED = 0xFF8D86AA;
 
-	static final int PURPLE = 0xFFB98AFF;
-	static final int AQUA = 0xFF55FFFF;
-	static final int GOLD = 0xFFFFAA00;
-	static final int GREEN = 0xFF55FF7F;
-	static final int YELLOW = 0xFFFFD84D;
-	static final int RED = 0xFFFF5F5F;
-	static final int OFF = 0xFF6B7078;
+	static final int PURPLE = 0xFFB69CFF; // accent as text and underline
+	static final int ACCENT = 0xFF7C5CF0; // accent as a fill (white text on it)
+	static final int ACCENT_HOT = 0xFF8F73FF;
+	static final int AQUA = 0xFF5EEAD4;
+	static final int GOLD = 0xFFFFB020;
+	static final int GREEN = 0xFF4ADE80;
+	static final int YELLOW = 0xFFFACC15;
+	static final int RED = 0xFFFF6B7A;
+	static final int OFF = 0xFF6D6788;
 	static final int ON_GREEN = 0xFF07260F;
 
 	private static final FontDescription REGULAR = new FontDescription.Resource(Identifier.fromNamespaceAndPath("pfp", "poppins"));

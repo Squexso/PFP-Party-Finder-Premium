@@ -12,11 +12,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.util.FormattedCharSequence;
 
 public class PfpScreen extends Screen {
-	private static final int PAD = 16;
-	private static final int ROW_H = 26;
-	private static final int ROW_PITCH = 30;
-	private static final int HEAD_H = 78;
-	private static final int FOOT_H = 50;
+	private static final int PAD = 20;
+	private static final int HDR = 28;
+	private static final int ROW_H = 28;
+	private static final int ROW_PITCH = 32;
+	private static final int HEAD_H = 82;
+	private static final int FOOT_H = 70;
 
 	private static int filter = 0; // 0 alle, 1 Dungeons, 2 Kuudra
 	private static String addMode = PfpConfig.BOTH;
@@ -105,30 +106,29 @@ public class PfpScreen extends Screen {
 
 	@Override
 	protected void init() {
-		PW = Math.min(420, width - 16);
+		PW = Math.min(460, width - 12);
 		IW = PW - 2 * PAD;
-		rows = Math.max(2, Math.min(8, (height - 16 - HEAD_H - FOOT_H) / ROW_PITCH));
-		hRows = Math.max(2, Math.min(4, (height - 16 - 52 - 40) / H_PITCH));
-		compact = height < 334; // small screens / large GUI scale: tighter settings layout, no hints
+		rows = Math.max(2, Math.min(8, (height - 16 - HDR - HEAD_H - FOOT_H) / ROW_PITCH));
+		hRows = Math.max(2, Math.min(4, (height - 16 - HDR - 52 - 40) / H_PITCH));
+		compact = height < 334 + HDR; // small screens / large GUI scale: tighter settings layout, no hints
 		panelH = switch (tab) {
-			case 0 -> Math.min(262, height - 16);
+			case 0 -> Math.min(262, height - 16 - HDR);
 			case 2 -> 52 + hRows * H_PITCH + 36;
-			case 3 -> Math.min(300, height - 16);
+			case 3 -> Math.min(300, height - 16 - HDR);
 			case 4 -> compact ? 230 : 318;
 			default -> HEAD_H + FOOT_H + rows * ROW_PITCH - 4;
 		};
 		x0 = (width - PW) / 2;
-		y0 = Math.max(8, (height - panelH) / 2);
+		y0 = Math.max(8 + HDR, (height - panelH - HDR) / 2 + HDR);
 		listTop = y0 + HEAD_H;
 		int left = x0 + PAD;
 		textBoxes.clear();
 
-		int tx = left;
+		int tw = IW / TAB_NAMES.length;
 		for (int i = 0; i < TAB_NAMES.length; i++) {
 			int idx = i;
-			addRenderableWidget(new FlatButton(tx, y0 + 12, TAB_W[i], 18, TAB_NAMES[i],
-				tab == i ? FlatButton.Style.TAB_ON : FlatButton.Style.NORMAL, null, () -> { tab = idx; hSel = -1; rebuildWidgets(); }));
-			tx += TAB_W[i] + 3;
+			addRenderableWidget(new FlatButton(left + i * tw, y0 + 8, tw - 2, 22, TAB_NAMES[i],
+				tab == i ? FlatButton.Style.TAB_ON : FlatButton.Style.TAB, null, () -> { tab = idx; hSel = -1; rebuildWidgets(); }));
 		}
 
 		if (tab == 0) return;
@@ -215,31 +215,33 @@ public class PfpScreen extends Screen {
 		}
 
 		int addY = y0 + 42;
-		int reasonW = IW - 92 - 6 - 6 - 76 - 6 - 84;
-		nameBox = field(left, addY, 92, "Name", 16, nameText, s -> nameText = s);
-		reasonBox = field(left + 98, addY, reasonW, "Reason  7D | inf", 100, reasonText, s -> reasonText = s);
-		addRenderableWidget(new FlatButton(left + IW - 84 - 6 - 76, addY, 76, 22, PfpConfig.modeLabel(addMode),
+		int nameW = Math.min(96, IW * 27 / 100), modeW = 64, addW = 54;
+		int reasonW = IW - nameW - modeW - addW - 18;
+		nameBox = field(left, addY, nameW, "Name", 16, nameText, s -> nameText = s);
+		reasonBox = field(left + nameW + 6, addY, reasonW, "Reason  7D | inf", 100, reasonText, s -> reasonText = s);
+		addRenderableWidget(new FlatButton(left + nameW + reasonW + 12, addY, modeW, 22, PfpConfig.modeLabel(addMode),
 			FlatButton.Style.NORMAL, null, () -> {
 				addMode = PfpConfig.BOTH.equals(addMode) ? PfpConfig.DUNGEON : PfpConfig.DUNGEON.equals(addMode) ? PfpConfig.KUUDRA : PfpConfig.BOTH;
 				rebuildWidgets();
 			}));
-		addRenderableWidget(new FlatButton(left + IW - 84, addY, 84, 22, "Add",
+		addRenderableWidget(new FlatButton(left + IW - addW, addY, addW, 22, "Add",
 			FlatButton.Style.PRIMARY, null, this::addEntry));
 
 		List<PfpConfig.Entry> all = visible();
 		int pages = Math.max(1, (all.size() + rows - 1) / rows);
 		page = Math.max(0, Math.min(page, pages - 1));
-		int navY = y0 + 12;
-		FlatButton next = new FlatButton(left + IW - 20, navY, 20, 18, ">",
+		int sy = listTop + rows * ROW_PITCH - 4 + 12;
+		int navY = sy + 28;
+		FlatButton next = new FlatButton(left + IW - 22, navY, 22, 20, ">",
 			FlatButton.Style.NORMAL, null, () -> { page++; rebuildWidgets(); });
-		FlatButton prev = new FlatButton(left + IW - 20 - 44 - 20, navY, 20, 18, "<",
+		FlatButton prev = new FlatButton(left + IW - 22 - 36 - 22, navY, 22, 20, "<",
 			FlatButton.Style.NORMAL, null, () -> { page--; rebuildWidgets(); });
 		prev.active = page > 0;
 		next.active = page < pages - 1;
 		addRenderableWidget(prev);
 		addRenderableWidget(next);
-		addRenderableWidget(new FlatButton(left + IW - 20 - 44 - 20 - 6 - 70, navY, 70, 18,
-			filter == 0 ? "All" : filter == 1 ? "Dungeons" : "Kuudra",
+		addRenderableWidget(new FlatButton(left, navY, 78, 20,
+			filter == 0 ? "All modes" : filter == 1 ? "Dungeons" : "Kuudra",
 			FlatButton.Style.NORMAL, null, () -> { filter = (filter + 1) % 3; page = 0; rebuildWidgets(); }));
 
 		for (int i = 0; i < rows; i++) {
@@ -250,19 +252,18 @@ public class PfpScreen extends Screen {
 				FlatButton.Style.DANGER, null, () -> { PfpConfig.remove(n); rebuildWidgets(); }));
 		}
 
-		int sy = listTop + rows * ROW_PITCH - 4 + 12;
-		int bw = (IW - 12) / 3;
+		int bw = (IW - 6) / 2;
 		addRenderableWidget(new FlatButton(left, sy, bw, 22, "Mod enabled",
 			FlatButton.Style.NORMAL, () -> PfpConfig.enabled, () -> {
 				PfpConfig.enabled = !PfpConfig.enabled;
 				PfpConfig.save();
 			}));
-		addRenderableWidget(new FlatButton(left + bw + 6, sy, bw, 22, "Party Finder only",
+		addRenderableWidget(new FlatButton(left + bw + 6, sy, IW - bw - 6, 22, "Party Finder only",
 			FlatButton.Style.NORMAL, () -> PfpConfig.pfOnly, () -> {
 				PfpConfig.pfOnly = !PfpConfig.pfOnly;
 				PfpConfig.save();
 			}));
-		addRenderableWidget(new FlatButton(left + 2 * (bw + 6), sy, IW - 2 * (bw + 6), 22, expLabel(),
+		addRenderableWidget(new FlatButton(left + 78 + 6, navY, IW - 78 - 6 - 22 - 36 - 22 - 6 - 6, 20, expLabel(),
 			FlatButton.Style.NORMAL, null, () -> {
 				PfpConfig.cycleExpiry();
 				rebuildWidgets();
@@ -315,7 +316,15 @@ public class PfpScreen extends Screen {
 	@Override
 	public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
 		g.fill(0, 0, width, height, PfpTheme.DIM);
-		PfpTheme.round(g, x0, y0, PW, panelH, PfpTheme.PANEL);
+		PfpTheme.round(g, x0 - 1, y0 - HDR - 1, PW + 2, panelH + HDR + 2, PfpTheme.HAIR);
+		PfpTheme.round(g, x0, y0 - HDR, PW, panelH + HDR, PfpTheme.PANEL);
+		Component logo = PfpTheme.medium("PFP");
+		PfpTheme.draw(g, logo, x0 + PAD, y0 - HDR + 9, PfpTheme.PURPLE);
+		PfpTheme.draw(g, PfpTheme.text("Party Finder Premium"), x0 + PAD + PfpTheme.width(logo) + 6, y0 - HDR + 9, PfpTheme.MUTED);
+		Component st = PfpTheme.text(PfpConfig.enabled ? "Protection on" : "Protection off");
+		PfpTheme.drawRight(g, st, x0 + PW - PAD, y0 - HDR + 9, PfpConfig.enabled ? PfpTheme.GREEN : PfpTheme.RED);
+		PfpTheme.dot(g, x0 + PW - PAD - PfpTheme.width(st) - 11, y0 - HDR + 11, PfpConfig.enabled ? PfpTheme.GREEN : PfpTheme.RED);
+		g.fill(x0 + PAD, y0 + 32, x0 + PW - PAD, y0 + 33, PfpTheme.HAIR);
 		hits.clear();
 		if (tab == 0) { drawOverview(g); return; }
 		if (tab == 2) { drawHistory(g, mouseX, mouseY); return; }
@@ -327,8 +336,9 @@ public class PfpScreen extends Screen {
 		List<PfpConfig.Entry> all = visible();
 		int pages = Math.max(1, (all.size() + rows - 1) / rows);
 
+		int navY = listTop + rows * ROW_PITCH - 4 + 12 + 28;
 		Component pageText = PfpTheme.text((page + 1) + "/" + pages);
-		PfpTheme.draw(g, pageText, right - 20 - 22 - PfpTheme.width(pageText) / 2, y0 + 15, PfpTheme.TEXT_2);
+		PfpTheme.draw(g, pageText, right - 22 - 18 - PfpTheme.width(pageText) / 2, navY + 6, PfpTheme.TEXT_2);
 
 		drawField(g, nameBox);
 		drawField(g, reasonBox);
@@ -350,35 +360,33 @@ public class PfpScreen extends Screen {
 
 			long d = PfpConfig.daysLeft(e);
 			int status = d < 0 ? PfpTheme.AQUA : d <= 1 ? PfpTheme.RED : d <= 3 ? PfpTheme.YELLOW : PfpTheme.GREEN;
-			PfpTheme.dot(g, left + 8, y + 10, status);
+			g.fill(left, y + 5, left + 3, y + ROW_H - 5, status);
 
 			int tailW = 0;
 			if (d < 0 && e.days() != null) {
 				Component tail = PfpTheme.text("permanent");
-				PfpTheme.drawRight(g, tail, left + rowW - 10, y + 4, PfpTheme.TEXT_2);
+				PfpTheme.drawRight(g, tail, left + rowW - 10, y + 5, PfpTheme.TEXT_2);
 				tailW = PfpTheme.width(tail) + 8;
 			}
 			if (d >= 0) {
 				Component tail = PfpTheme.medium(d + (d == 1 ? " day left" : " days left"));
-				PfpTheme.drawRight(g, tail, left + rowW - 10, y + 4, status);
+				PfpTheme.drawRight(g, tail, left + rowW - 10, y + 5, status);
 				tailW = PfpTheme.width(tail) + 8;
 			}
 			Component nm = PfpTheme.medium(e.name());
-			PfpTheme.draw(g, nm, left + 22, y + 3, PfpTheme.TEXT);
+			PfpTheme.draw(g, nm, left + 14, y + 4, PfpTheme.TEXT);
 			String md = e.mode() == null ? PfpConfig.BOTH : e.mode();
-			PfpTheme.draw(g, PfpTheme.text(PfpConfig.modeLabel(md)), left + 22 + PfpTheme.width(nm) + 8, y + 3, modeColor(md));
+			PfpTheme.draw(g, PfpTheme.text(PfpConfig.modeLabel(md)), left + 14 + PfpTheme.width(nm) + 8, y + 4, modeColor(md));
 				String tag = PfpConfig.tagOf(e.name());
 				int hitW = PfpTheme.width(nm) + 8 + PfpTheme.width(PfpTheme.text(PfpConfig.modeLabel(md)));
 				if (tag != null) {
-					PfpTheme.draw(g, PfpTheme.text(tag), left + 22 + hitW + 8, y + 3, PfpConfig.tagColor(tag));
+					PfpTheme.draw(g, PfpTheme.text(tag), left + 14 + hitW + 8, y + 4, PfpConfig.tagColor(tag));
 					hitW += 8 + PfpTheme.width(PfpTheme.text(tag));
 				}
-				hits.add(new Hit(left + 22, y + 2, hitW, 12, e.name()));
-			PfpTheme.draw(g, PfpTheme.fit(e.reason(), rowW - 22 - 10 - tailW), left + 22, y + 14, PfpTheme.TEXT_2);
+				hits.add(new Hit(left + 14, y + 3, hitW, 12, e.name()));
+			PfpTheme.draw(g, PfpTheme.fit(e.reason(), rowW - 14 - 10 - tailW), left + 14, y + 16, PfpTheme.TEXT_2);
 		}
 
-		int fy = listTop + rows * ROW_PITCH - 4 + 12 + 22 + 6;
-		PfpTheme.draw(g, PfpTheme.text("Esc to close"), left, fy, PfpTheme.MUTED);
 	}
 
 	private static List<PartyLog.Session> history() {

@@ -8,20 +8,20 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.InputWithModifiers;
 import net.minecraft.network.chat.Component;
 
-/** Weicher Button: halbtransparente Flaeche, kein Rahmen. */
+/** Flat button. With a BooleanSupplier it is drawn as a switch (label left, switch right). */
 final class FlatButton extends AbstractButton {
-	enum Style { PRIMARY, NORMAL, DANGER, TAB_ON }
+	enum Style { PRIMARY, NORMAL, DANGER, TAB, TAB_ON }
 
 	private final Style style;
 	private final String label;
 	private final Runnable action;
-	private final BooleanSupplier dot;
+	private final BooleanSupplier state;
 
-	FlatButton(int x, int y, int w, int h, String label, Style style, BooleanSupplier dot, Runnable action) {
+	FlatButton(int x, int y, int w, int h, String label, Style style, BooleanSupplier state, Runnable action) {
 		super(x, y, w, h, Component.literal(label));
 		this.label = label;
 		this.style = style;
-		this.dot = dot;
+		this.state = state;
 		this.action = action;
 	}
 
@@ -35,18 +35,24 @@ final class FlatButton extends AbstractButton {
 		int x = getX(), y = getY(), w = getWidth(), h = getHeight();
 		boolean hot = isHoveredOrFocused() && active;
 
+		if (style == Style.TAB || style == Style.TAB_ON) {
+			boolean on = style == Style.TAB_ON;
+			if (on) PfpTheme.round(g, x, y, w, h, 0x22B69CFF);
+			else if (hot) PfpTheme.round(g, x, y, w, h, 0x14FFFFFF);
+			Component t = PfpTheme.medium(label);
+			PfpTheme.draw(g, t, x + (w - PfpTheme.width(t)) / 2, y + (h - 9) / 2 - 1, on ? PfpTheme.PURPLE : hot ? PfpTheme.TEXT : PfpTheme.MUTED);
+			if (on) g.fill(x + 6, y + h - 2, x + w - 6, y + h, PfpTheme.PURPLE);
+			return;
+		}
+
 		int bg, fg;
 		switch (style) {
 			case PRIMARY -> {
-				bg = hot ? 0xFF7DFFA0 : PfpTheme.GREEN;
-				fg = PfpTheme.ON_GREEN;
-			}
-			case TAB_ON -> {
-				bg = PfpTheme.BTN_HOT;
-				fg = PfpTheme.PURPLE;
+				bg = hot ? PfpTheme.ACCENT_HOT : PfpTheme.ACCENT;
+				fg = 0xFFFFFFFF;
 			}
 			case DANGER -> {
-				bg = hot ? 0x33FF5F5F : 0x00000000;
+				bg = hot ? 0x44FF6B7A : 0x00000000;
 				fg = hot ? PfpTheme.RED : PfpTheme.MUTED;
 			}
 			default -> {
@@ -55,21 +61,23 @@ final class FlatButton extends AbstractButton {
 			}
 		}
 		if (!active) {
-			bg = 0x10FFFFFF;
+			bg = PfpTheme.ROW;
 			fg = PfpTheme.OFF;
 		}
 		if (bg != 0) PfpTheme.round(g, x, y, w, h, bg);
 
-		Component text = PfpTheme.medium(label);
-		int textW = PfpTheme.width(text);
-		int dotW = dot != null ? 12 : 0;
-		int startX = x + (w - textW - dotW) / 2;
 		int ty = y + (h - 9) / 2;
-		if (dot != null) {
-			PfpTheme.dot(g, startX, ty + 2, dot.getAsBoolean() ? PfpTheme.GREEN : PfpTheme.OFF);
-			startX += dotW;
+		if (state != null) { // switch
+			boolean on = state.getAsBoolean();
+			PfpTheme.draw(g, PfpTheme.fit(label, w - 10 - 38), x + 10, ty, fg);
+			int sx = x + w - 32, sy = y + (h - 12) / 2;
+			PfpTheme.round(g, sx, sy, 24, 12, on ? PfpTheme.ACCENT : 0xFF443D63);
+			int kx = on ? sx + 14 : sx + 2;
+			PfpTheme.round(g, kx, sy + 2, 8, 8, on ? 0xFFFFFFFF : PfpTheme.MUTED);
+			return;
 		}
-		PfpTheme.draw(g, text, startX, ty, fg);
+		Component text = PfpTheme.medium(label);
+		PfpTheme.draw(g, text, x + (w - PfpTheme.width(text)) / 2, ty, fg);
 	}
 
 	@Override
