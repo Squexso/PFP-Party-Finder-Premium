@@ -250,6 +250,25 @@ public class PfpClient implements ClientModInitializer {
 		});
 	}
 
+	/** Reads every class of this mod now, so replacing the jar while the game runs cannot break lazy class loading later. */
+	private static void loadAllClasses() {
+		try {
+			var container = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("pfp");
+			if (container.isEmpty()) return;
+			for (java.nio.file.Path root : container.get().getRootPaths()) {
+				try (var files = java.nio.file.Files.walk(root)) {
+					for (java.nio.file.Path f : (Iterable<java.nio.file.Path>) files::iterator) {
+						String n = root.relativize(f).toString().replace('\\', '/');
+						if (!n.endsWith(".class") || !n.startsWith("dev/pfp/")) continue;
+						Class.forName(n.substring(0, n.length() - 6).replace('/', '.'), false, PfpClient.class.getClassLoader());
+					}
+				}
+			}
+		} catch (Throwable t) {
+			org.slf4j.LoggerFactory.getLogger("pfp").warn("could not preload classes", t);
+		}
+	}
+
 	private static String clean(String s) {
 		return s.replace(' ', ' ').replaceAll("§.", "");
 	}
@@ -333,6 +352,7 @@ public class PfpClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		loadAllClasses();
 		PfpConfig.load();
 		PartyLog.load();
 		net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, ctx, flag, lines) -> {
