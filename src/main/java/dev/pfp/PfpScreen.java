@@ -73,11 +73,11 @@ public class PfpScreen extends Screen {
 		IW = PW - 2 * PAD;
 		rows = Math.max(2, Math.min(8, (height - 16 - HEAD_H - FOOT_H) / ROW_PITCH));
 		hRows = Math.max(2, Math.min(4, (height - 16 - 52 - 40) / H_PITCH));
-		compact = height < 334; // small screens / large GUI scale: tighter settings layout, no hints
+		compact = height < 376; // small screens / large GUI scale: tighter settings layout, no hints
 		panelH = switch (tab) {
 			case 0 -> Math.min(262, height - 16);
 			case 2 -> 52 + hRows * H_PITCH + 36;
-			case 3 -> compact ? 230 : 318;
+			case 3 -> compact ? 270 : 360;
 			default -> HEAD_H + FOOT_H + rows * ROW_PITCH - 4;
 		};
 		x0 = (width - PW) / 2;
@@ -146,6 +146,7 @@ public class PfpScreen extends Screen {
 			addRenderableWidget(new FlatButton(left, y, IW, 20,
 				listening ? "Press a key ..." : "Coords key: " + PfpClient.coordsKeyName(),
 				listening ? FlatButton.Style.TAB_ON : FlatButton.Style.NORMAL, null, () -> { listening = true; rebuildWidgets(); }));
+			textBoxes.add(field(left, y + (compact ? 40 : 46), IW, "Requirement", 100, PfpConfig.requirement, v -> { PfpConfig.requirement = v; PfpConfig.save(); }));
 			return;
 		}
 
@@ -480,16 +481,16 @@ public class PfpScreen extends Screen {
 
 	private void drawSettings(GuiGraphicsExtractor g) {
 		int l = x0 + PAD;
-		String[] labels = {"When someone is kicked", "When someone is added"};
-		for (int i = 0; i < 2; i++) {
+		String[] labels = {"When someone is kicked", "When someone is added", "Required items for joiners (e.g. Term, Juju), others are kicked"};
+		for (int i = 0; i < 3; i++) {
 			EditBox box = textBoxes.get(i);
-			PfpTheme.draw(g, PfpTheme.text(labels[i]), l, box.getY() - 19, PfpTheme.TEXT_2);
+			PfpTheme.draw(g, PfpTheme.fit(labels[i], IW), l, box.getY() - 19, PfpTheme.TEXT_2);
 			drawField(g, box);
 		}
 		if (compact) return;
-		PfpTheme.draw(g, PfpTheme.fit("[PFP] " + PfpConfig.format(PfpConfig.kickMsg, "Name", "Reason"), IW), l, y0 + 288, PfpTheme.PURPLE);
+		PfpTheme.draw(g, PfpTheme.fit("[PFP] " + PfpConfig.format(PfpConfig.kickMsg, "Name", "Reason"), IW), l, y0 + 330, PfpTheme.PURPLE);
 		String key = PfpConfig.apiKey.isBlank() ? "no API key (/pfp apikey <key>)" : "API key set";
-		PfpTheme.draw(g, PfpTheme.fit("{name} {reason} are replaced, [PFP] always first. Secret tracker: " + key, IW), l, y0 + 300, PfpTheme.MUTED);
+		PfpTheme.draw(g, PfpTheme.fit("{name} {reason} are replaced, [PFP] always first. Secret tracker: " + key, IW), l, y0 + 342, PfpTheme.MUTED);
 	}
 
 	@Override

@@ -77,6 +77,8 @@ public final class PfpConfig {
 	/** Your own Hypixel API key for the secret tracker. Stored in plain text in config/pfp.json, never printed. */
 	public static String apiKey = "";
 	public static boolean debug = false;
+	/** Items every joining player must own (comma separated, e.g. "Term"). Empty = off. */
+	public static String requirement = "";
 	/** Local player tags (lowercase name -> tag), separate from the blacklist. */
 	public static Map<String, String> tags = new LinkedHashMap<>();
 	public static final String[] TAGS = {"Trusted", "Friend", "Toxic", "Carry", "Suspicious"};
@@ -118,6 +120,7 @@ public final class PfpConfig {
 		boolean secretTracker = false;
 		String apiKey = "";
 		boolean debug = false;
+		String requirement = "";
 		Map<String, String> tags = new LinkedHashMap<>();
 	}
 
@@ -147,6 +150,7 @@ public final class PfpConfig {
 				secretTracker = d.secretTracker;
 				if (d.apiKey != null) apiKey = d.apiKey;
 				debug = d.debug;
+				if (d.requirement != null) requirement = d.requirement;
 				if (d.tags != null) tags = d.tags;
 			} else { // altes Format: reine Map
 				Map<String, Entry> old = GSON.fromJson(o, MAP_TYPE);
@@ -179,6 +183,7 @@ public final class PfpConfig {
 		d.secretTracker = secretTracker;
 		d.apiKey = apiKey;
 		d.debug = debug;
+		d.requirement = requirement;
 		d.tags = tags;
 		try {
 			Files.writeString(FILE, GSON.toJson(d));

@@ -32,7 +32,7 @@ final class SecretTracker {
 	private static final long AFTER_RUN_DELAY_S = 20; // the API lags behind the game
 	private static boolean warnedKey;
 	/** Deployed proxy/worker.js (it holds the API key). If it fails, the player's own key is used. */
-	private static final String PROXY_URL = "https://pfp-secrets.danielseinfont1.workers.dev";
+	static final String PROXY_URL = "https://pfp-secrets.danielseinfont1.workers.dev";
 
 	private static final Map<String, Integer> CAPTURED = new ConcurrentHashMap<>();
 	private static final java.util.regex.Pattern COUNT = java.util.regex.Pattern.compile("^(\\w{1,16}): (\\d+)$");
@@ -121,12 +121,30 @@ final class SecretTracker {
 		}
 	}
 
-	private static void chat(String text, ChatFormatting color) {
+	static void chat(String text, ChatFormatting color) {
 		Minecraft mc = Minecraft.getInstance();
 		mc.execute(() -> {
 			if (mc.player != null) mc.player.sendSystemMessage(Component.literal("[PFP] ").withStyle(ChatFormatting.LIGHT_PURPLE)
 				.append(Component.literal(text).withStyle(color)));
 		});
+	}
+
+	/** Item ids of a player (inventory, armor, equipment, ender chest) via the proxy, or null when unknown (API off, error). */
+	static java.util.Set<String> gear(String name) {
+		try {
+			String uuid = uuid(name);
+			if (uuid == null) return null;
+			HttpResponse<String> r = HTTP.send(HttpRequest.newBuilder(URI.create(PROXY_URL + "/gear/" + uuid))
+				.timeout(Duration.ofSeconds(15)).header("User-Agent", "PFP-Party-Finder-Premium").build(), HttpResponse.BodyHandlers.ofString());
+			if (r.statusCode() != 200) return null;
+			JsonObject o = JsonParser.parseString(r.body()).getAsJsonObject();
+			if (!o.get("api").getAsBoolean()) return null;
+			java.util.Set<String> ids = new java.util.HashSet<>();
+			o.getAsJsonArray("ids").forEach(e -> ids.add(e.getAsString()));
+			return ids;
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	private static boolean hasApi() {

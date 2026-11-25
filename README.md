@@ -74,3 +74,4 @@ The jar ends up in `build/libs/`.
 
 Code: see `LICENSE` if present, otherwise all rights reserved by the author until one is added.
 The bundled font Poppins is licensed under the SIL Open Font License 1.1, see `assets/pfp/font/OFL.txt`.
+- **Requirement check (Settings):** list items every joining player must own, e.g. `Term, Juju` (aliases: term, hype, juju, bonemerang; other words match the SkyBlock item id). The inventory, armor, equipment and ender chest of the player are read from the Hypixel API through the proxy (`proxy/`). A player who lacks an item is announced in party chat and kicked, if you are the leader. If the inventory API is off or the lookup fails, the result is unknown and nobody is kicked.

@@ -243,6 +243,21 @@ public class PfpClient implements ClientModInitializer {
 		}
 	}
 
+	/** Result of the requirement check: missing = null (unknown), "" (fine) or the list of missing items. */
+	static void requirementResult(String name, String missing) {
+		if (missing == null) {
+			SecretTracker.chat("Could not check " + name + " (inventory API off or lookup failed), not kicked.", ChatFormatting.YELLOW);
+		} else if (!missing.isEmpty()) {
+			if (Boolean.TRUE.equals(isLeader)) {
+				partyMsg(name + " does not meet the requirement: " + missing);
+				PartyLog.kicked(name);
+				PENDING.add(new PendingKick(name, tickNow + KICK_DELAY, MAX_TRIES));
+			} else {
+				SecretTracker.chat(name + " does not meet the requirement: " + missing + " (you are not the leader or it is unknown, nobody kicked)", ChatFormatting.RED);
+			}
+		}
+	}
+
 	private static void notLeader(String name, String reason) {
 		var mc = Minecraft.getInstance();
 		net.minecraft.client.gui.components.toasts.SystemToast.add(mc.gui.toastManager(),
@@ -319,6 +334,7 @@ public class PfpClient implements ClientModInitializer {
 				if (!m.find()) return;
 			}
 			PartyLog.memberJoin(m.group(1), mode);
+			GearCheck.check(m.group(1));
 			PfpConfig.purge();
 			PfpConfig.Entry e = PfpConfig.entries.get(PfpConfig.key(m.group(1)));
 			var player = Minecraft.getInstance().player;
